@@ -1,0 +1,33 @@
+server:
+  port: 8120
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: sa-admin
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+  # mysql
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ai_java
+    username: root
+    password: 123456
+
+# springdoc-openapi
+# http://localhost:8120/api/doc.html#/home
+springdoc:
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.ai.aijava.controller
+# knife4j
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn

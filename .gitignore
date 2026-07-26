@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Claude Code Hook 日志
+.claude/hooks/.post-edit.log
+
+/.agents
+/.claude
+

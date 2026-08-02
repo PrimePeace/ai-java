@@ -19,6 +19,11 @@ spring:
     username: root
     password: 123456
 
+jwt:
+  secret: "your-256-bit-secret-key-here-must-be-at-least-32-chars" # >= 256 bit
+  access-token-expiration: 7200 # 2h (秒)
+  refresh-token-expiration: 604800 # 7d (秒)
+
 # springdoc-openapi
 # http://localhost:8120/api/doc.html#/home
 springdoc:

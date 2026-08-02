@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { NConfigProvider } from 'naive-ui';
-
+import {
+  NConfigProvider,
+  NMessageProvider,
+  NDialogProvider,
+  NLoadingBarProvider,
+} from "naive-ui";
 </script>
 
 <template>
-  <h1>首页</h1>
+  <NConfigProvider>
+    <NLoadingBarProvider>
+      <NDialogProvider>
+        <NMessageProvider>
+          <RouterView />
+        </NMessageProvider>
+      </NDialogProvider>
+    </NLoadingBarProvider>
+  </NConfigProvider>
 </template>
-
-<style scoped></style>

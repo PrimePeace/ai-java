@@ -1,6 +1,8 @@
 package com.ai.aijava.controller;
 
+import com.ai.aijava.annotation.AuditLog;
 import com.ai.aijava.annotation.RequireLogin;
+import com.ai.aijava.audit.AuditLogType;
 import com.ai.aijava.common.BaseResponse;
 import com.ai.aijava.common.ResultUtils;
 import com.ai.aijava.dto.request.RefreshTokenRequest;
@@ -9,6 +11,7 @@ import com.ai.aijava.dto.request.UserRegisterRequest;
 import com.ai.aijava.dto.vo.UserLoginVO;
 import com.ai.aijava.dto.vo.UserVO;
 import com.ai.aijava.service.UserService;
+import com.ai.aijava.utils.IpUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,10 +38,11 @@ public class UserController {
     }
 
     @Operation(summary = "用户登录")
+    @AuditLog(type = AuditLogType.LOGIN, module = "用户认证", description = "用户登录")
     @PostMapping("/login")
     public BaseResponse<UserLoginVO> login(@RequestBody @Valid UserLoginRequest request,
                                            HttpServletRequest httpRequest) {
-        String clientIp = getClientIp(httpRequest);
+        String clientIp = IpUtils.getClientIp(httpRequest);
         UserLoginVO loginVO = userService.login(request, clientIp);
         return ResultUtils.success(loginVO);
     }
@@ -56,23 +60,5 @@ public class UserController {
     public BaseResponse<UserVO> getCurrentUser() {
         UserVO userVO = userService.getCurrentUser();
         return ResultUtils.success(userVO);
-    }
-
-    /**
-     * 获取客户端真实 IP
-     */
-    private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // 代理链取第一个
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
     }
 }

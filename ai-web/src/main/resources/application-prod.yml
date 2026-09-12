@@ -24,12 +24,17 @@ jwt:
   access-token-expiration: 7200 # 2h (秒)
   refresh-token-expiration: 604800 # 7d (秒)
 
+# 审计日志（等保三级 >= 6 个月）
+audit:
+  log:
+    retention-days: 180 # 审计日志文件保留天数，桥接到 logback AUDIT_FILE 的 maxHistory
+
 # springdoc-openapi
 # http://localhost:8120/api/doc.html#/home
 springdoc:
   group-configs:
-    - group: 'default'
-      paths-to-match: '/**'
+    - group: "default"
+      paths-to-match: "/**"
       packages-to-scan: com.ai.aijava.controller
 # knife4j
 knife4j:

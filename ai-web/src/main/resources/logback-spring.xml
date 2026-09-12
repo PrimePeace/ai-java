@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    日志配置
+    - logs/app.log        普通应用日志，保留 30 天
+    - logs/audit/audit.log 审计日志（等保三级要求 >= 6 个月），保留天数由 audit.log.retention-days 配置
+    - 审计日志 logger 关闭 additivity，不混入 app.log
+-->
+<configuration>
+    <!-- 审计日志保留天数（application.yml: audit.log.retention-days，默认 180 天） -->
+    <springProperty scope="context" name="AUDIT_RETENTION_DAYS" source="audit.log.retention-days" defaultValue="180"/>
+
+    <!-- 普通应用日志文件 -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/app.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/app.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 控制台（开发调试） -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 审计日志专用文件：管道分隔便于解析，保留 180 天 -->
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/audit/audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/audit/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>${AUDIT_RETENTION_DAYS}</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <!-- 时间 + 管道分隔的结构化消息 -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS}|%msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 审计切面日志：只写审计文件，不向 root 传播（不混入 app.log/控制台） -->
+    <logger name="com.ai.aijava.audit.AuditLogAspect" level="INFO" additivity="false">
+        <appender-ref ref="AUDIT_FILE"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

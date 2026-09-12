@@ -10,10 +10,11 @@ Spring Boot 4.1 + Vue 3 + TypeScript + MyBatis-Flex 全栈项目（当前为初�
 
 ### 后端（项目根目录）
 
-- `mvn spring-boot:run` # 启动后端开发服务器
-- `mvn clean package` # 生产构建
+- `mvn clean compile` # 清理并编译全模块
+- `mvn clean package` # 生产构建（ai-basic 普通 jar + ai-web 可执行 jar）
+- `mvn install -pl ai-basic -am -DskipTests` # 安装基础库到本地仓库（首次启动或 ai-basic 变更后需要）
+- `mvn spring-boot:run -pl ai-web` # 启动后端开发服务器（需先执行上一条 install）
 - `mvn test` # 运行测试
-- `mvn clean compile` # 清理并编译
 
 ### 前端（ai-java-front/）
 
@@ -24,10 +25,16 @@ Spring Boot 4.1 + Vue 3 + TypeScript + MyBatis-Flex 全栈项目（当前为初�
 
 ## 架构概览
 
+### 模块结构（Maven 多模块）
+
+- **根 POM**：聚合 + dependencyManagement 统一管版本，不含代码
+- **ai-basic**：通用基础库（统一响应、异常体系、工具类、上下文、注解），包名 `com.ai.aijava.*`
+- **ai-web**：应用模块（启动类、controller/service/mapper/entity/dto/config），依赖 ai-basic
+
 ### 后端（Java 21 + Spring Boot 4.1）
 
 - **基础包**：`com.ai.aijava`
-- **入口类**：`src/main/java/com/ai/aijava/AiJavaApplication.java`
+- **入口类**：`ai-web/src/main/java/com/ai/aijava/AiJavaApplication.java`
 - **ORM**：MyBatis-Flex（含代码生成器 `mybatis-flex-codegen`，TableDef 由生成器产出，不手写）
 - **数据库**：MySQL + HikariCP 连接池
 - **缓存**：Redis（含 commons-pool2 连接池）+ Caffeine 本地缓存

@@ -1045,8 +1045,8 @@ package com.ai.aijava.agent.pipeline;
 
 import com.ai.aijava.agent.config.AgentProperties;
 import lombok.RequiredArgsConstructor;
-import org.springframework.ai.transformer.TokenTextSplitter;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -1068,19 +1068,25 @@ public class ChunkSplitter {
      */
     public List<String> split(String text) {
         Document fullDoc = new Document(text);
-        TokenTextSplitter splitter = new TokenTextSplitter(
-                agentProperties.getChunkSize(),  // defaultChunkSize
-                200,                             // minChunkSizeChars（低于此长度并入前片）
-                50,                              // minChunkLengthToEmbed（过短片段丢弃阈值，这里不丢）
-                100,                             // maxNumChunks（安全上限，防超大文档切片爆炸）
-                true);                           // keepSeparator
+        // Spring AI 2.0：5 参构造已移除，改用 Builder（包路径也迁移到 transformer.splitter）
+        TokenTextSplitter splitter = TokenTextSplitter.builder()
+                .withChunkSize(agentProperties.getChunkSize()) // 切分 token 数
+                .withMinChunkSizeChars(200)   // 低于此长度并入前片
+                .withMinChunkLengthToEmbed(50) // 过短片段丢弃阈值，这里不丢
+                .withMaxNumChunks(100)        // 安全上限，防超大文档切片爆炸
+                .withKeepSeparator(true)      // 保留分隔符
+                .build();
         List<Document> chunks = splitter.apply(List.of(fullDoc));
         return chunks.stream().map(Document::getText).toList();
     }
 }
 ```
 
-说明：`TokenTextSplitter` 构造参数语义为 `(defaultChunkSize, minChunkSizeChars, minChunkLengthToEmbed, maxNumChunks, keepSeparator)`；若所用 Spring AI 版本构造器签名不同，以 IDE 提示为准调整（无参构造 `new TokenTextSplitter()` 也可用，默认 800 token）。
+说明（Spring AI 2.0.0 实测，javap 验证）：
+
+- `TokenTextSplitter` 包路径从 `org.springframework.ai.transformer` 迁移到 `org.springframework.ai.transformer.splitter`
+- 旧 5 参构造 `(int, int, int, int, boolean)` 已移除，仅剩无参 / `EncodingType` / 6 参 `(int, int, int, int, boolean, List<Character>)` / Builder
+- `new Document(String)` 与 `Document.getText()` 在 2.0.0 未变，可继续使用
 
 ### Task 11: DocumentIngestService（上传 + 异步摄取状态机）
 

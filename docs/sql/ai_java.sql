@@ -40,3 +40,72 @@ CREATE TABLE `audit_log` (
     INDEX `idx_operation_type` (`operation_type`),
     INDEX `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='审计日志表';
+
+
+-- ==================== ai-agent 智能体模块 ====================
+
+-- 知识库表
+CREATE TABLE `knowledge_base` (
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '知识库ID',
+    `name`        VARCHAR(64)  NOT NULL COMMENT '知识库名称',
+    `description` VARCHAR(256) DEFAULT '' COMMENT '知识库描述',
+    `user_id`     BIGINT       NOT NULL COMMENT '创建者用户ID',
+    `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    INDEX `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库表';
+
+-- 知识库文档表（摄取状态机：UPLOADED → PROCESSING → COMPLETED/FAILED）
+CREATE TABLE `knowledge_document` (
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '文档ID',
+    `kb_id`         BIGINT       NOT NULL COMMENT '所属知识库ID',
+    `file_name`     VARCHAR(256) NOT NULL COMMENT '原始文件名',
+    `file_type`     VARCHAR(32)  NOT NULL DEFAULT '' COMMENT '文件类型（pdf/docx/md/txt）',
+    `file_size`     BIGINT       NOT NULL DEFAULT 0 COMMENT '文件大小（字节）',
+    `file_path`     VARCHAR(512) NOT NULL DEFAULT '' COMMENT '服务器存储路径',
+    `status`        VARCHAR(16)  NOT NULL DEFAULT 'UPLOADED' COMMENT '处理状态（DocStatus枚举名）',
+    `error_message` VARCHAR(512) DEFAULT NULL COMMENT '处理失败原因（FAILED时）',
+    `create_time`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    INDEX `idx_kb_status_time` (`kb_id`, `status`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库文档表';
+
+-- 文档切片表（向量只存 Redis，原文存此表用于引用溯源与索引重建）
+CREATE TABLE `document_chunk` (
+    `id`          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '切片ID',
+    `doc_id`      BIGINT      NOT NULL COMMENT '所属文档ID',
+    `kb_id`       BIGINT      NOT NULL COMMENT '所属知识库ID（冗余，清理向量时免join）',
+    `chunk_index` INT         NOT NULL COMMENT '切片序号（文档内从0递增）',
+    `content`     MEDIUMTEXT  NOT NULL COMMENT '切片原文',
+    `create_time` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_doc_index` (`doc_id`, `chunk_index`),
+    INDEX `idx_kb_id` (`kb_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档切片表';
+
+-- 对话会话表
+CREATE TABLE `chat_session` (
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '会话ID',
+    `user_id`     BIGINT       NOT NULL COMMENT '所属用户ID',
+    `kb_id`       BIGINT       NOT NULL COMMENT '关联知识库ID（一个会话绑定一个知识库）',
+    `title`       VARCHAR(128) NOT NULL DEFAULT '' COMMENT '会话标题（默认取首条提问前20字符）',
+    `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后活跃时间',
+    PRIMARY KEY (`id`),
+    INDEX `idx_user_update` (`user_id`, `update_time`),
+    INDEX `idx_kb_id` (`kb_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对话会话表';
+
+-- 对话消息表（追加型，无 update_time；idx_session_id 隐含主键后缀，等效 (session_id, id)）
+CREATE TABLE `chat_message` (
+    `id`          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '消息ID',
+    `session_id`  BIGINT      NOT NULL COMMENT '所属会话ID',
+    `role`        VARCHAR(16) NOT NULL COMMENT '角色（user/assistant）',
+    `content`     MEDIUMTEXT  NOT NULL COMMENT '消息内容',
+    `citations`   MEDIUMTEXT  DEFAULT NULL COMMENT '引用JSON数组（仅assistant消息：[{docId,docName,chunkIndex,content,score}]）',
+    `create_time` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    INDEX `idx_session_id` (`session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对话消息表';

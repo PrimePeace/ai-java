@@ -13,6 +13,12 @@
     <description>ai-java 应用模块（可执行 jar）</description>
 
     <dependencies>
+        <!-- AI 智能体模块 -->
+        <dependency>
+            <groupId>com.ai</groupId>
+            <artifactId>ai-agent</artifactId>
+        </dependency>
+
         <!-- 内部通用基础库 -->
         <dependency>
             <groupId>com.ai</groupId>

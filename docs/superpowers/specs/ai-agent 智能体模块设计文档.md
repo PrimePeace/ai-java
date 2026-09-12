@@ -625,13 +625,13 @@ mcp:
 
 **代码侧配置变更**：
 
-| 变更                                      | 说明                                                                                     |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `JwtInterceptor` 白名单                   | 追加 MCP 端点 `/mcp`（STREAMABLE 单端点；若 fallback SSE 则为 `/sse` + `/mcp/messages`） |
-| `McpSecurityInterceptor`（ai-agent 新增） | 拦截 MCP 端点，校验 `X-MCP-Token` 请求头与 `mcp.security.token` 一致，不一致返回 401     |
-| `AgentProperties`（ai-agent）             | 绑定 `agent.*`（见 4.5）                                                                 |
-| `GlobalExceptionHandler`（ai-basic）      | 新增 `MaxUploadSizeExceededException` 处理（5.5 #5）                                     |
-| `AsyncConfig`（ai-web）                   | 新增 `ingestExecutor` 线程池（4.1 #4）                                                   |
+| 变更                                      | 说明                                                                                         |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------- |
+| ~~JwtInterceptor 白名单~~                 | **无需变更**：拦截器是 `@RequireLogin` 注解驱动（无注解即放行），MCP 端点天然不经过 JWT 校验 |
+| `McpSecurityInterceptor`（ai-agent 新增） | 拦截 MCP 端点，校验 `X-MCP-Token` 请求头与 `mcp.security.token` 一致，不一致返回 401         |
+| `AgentProperties`（ai-agent）             | 绑定 `agent.*`（见 4.5）                                                                     |
+| `GlobalExceptionHandler`（ai-basic）      | 新增 `MaxUploadSizeExceededException` 处理（5.5 #5）                                         |
+| `AsyncConfig`（ai-web）                   | 新增 `ingestExecutor` 线程池（4.1 #4）                                                       |
 
 **Redis 运维要求**（部署检查项）：
 

@@ -4,6 +4,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/**
+ * 跨域配置（CORS）
+ * 允许前端跨域访问后端接口，支持携带 Cookie。
+ * 适用于前后端分离开发场景，解决浏览器同源策略限制。
+ */
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 

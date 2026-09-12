@@ -362,7 +362,6 @@ public interface UserMapper extends BaseMapper<User> {
 
 #### UserRegisterRequest.java
 
-文件路径：`src/main/java/com/ai/aijava/dto/request/UserRegisterRequest.java`
 
 ```java
 package com.ai.aijava.dto;
@@ -393,7 +392,6 @@ public class UserRegisterRequest {
 
 #### UserLoginRequest.java
 
-文件路径：`src/main/java/com/ai/aijava/dto/request/UserLoginRequest.java`
 
 ```java
 package com.ai.aijava.dto;
@@ -414,7 +412,6 @@ public class UserLoginRequest {
 
 #### UserLoginVO.java
 
-文件路径：`src/main/java/com/ai/aijava/dto/vo/UserLoginVO.java`
 
 ```java
 package com.ai.aijava.dto;
@@ -443,7 +440,6 @@ public class UserLoginVO {
 
 #### UserVO.java
 
-文件路径：`src/main/java/com/ai/aijava/dto/vo/UserVO.java`
 
 ```java
 package com.ai.aijava.dto;
@@ -1052,7 +1048,6 @@ public class UserService {
      * 刷新 Token
      */
     public UserLoginVO refreshToken(String refreshToken) {
-        if (!JwtUtils.isTokenValid(refreshToken)) {
             throw new BusinessException(ErrorCode.TOKEN_EXPIRED, "Refresh Token 已过期，请重新登录");
         }
 
@@ -1219,7 +1214,6 @@ public class UserController {
 
 ### 11.16 RefreshTokenRequest.java — 刷新 Token 请求 DTO
 
-文件路径：`src/main/java/com/ai/aijava/dto/request/RefreshTokenRequest.java`
 
 ```java
 package com.ai.aijava.dto;

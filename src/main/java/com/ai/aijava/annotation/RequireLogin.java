@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 标记需要登录验证的接口 <br>
+ * 标记需要登录验证的接口
  * 标注在 Controller 方法上，由 JwtInterceptor 识别
  */
 @Target(ElementType.METHOD)

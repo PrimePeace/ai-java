@@ -85,7 +85,7 @@ ai-java/                          # 根：聚合 POM（packaging=pom）
 | 依赖                                                   | 用途                                              | 与现状对比                                    |
 | ------------------------------------------------------ | ------------------------------------------------- | --------------------------------------------- |
 | `spring-boot-starter-webmvc`                           | GlobalExceptionHandler 的 `@RestControllerAdvice` | 沿用                                          |
-| `io.swagger.core.v3:swagger-annotations-jakarta` 2.2.9 | BaseResponse/GlobalExceptionHandler 的 `@Hidden`  | 替代全量 knife4j starter 传递，纯注���包      |
+| `io.swagger.core.v3:swagger-annotations-jakarta` 2.2.9 | BaseResponse/GlobalExceptionHandler 的 `@Hidden`  | 替代全量 knife4j starter 传递，纯注入包      |
 | `io.jsonwebtoken:jjwt-api` 0.12.6                      | JwtUtils                                          | impl/jackson（runtime）留在 ai-web            |
 | `org.springframework.security:spring-security-crypto`  | BCryptUtils 的 `BCryptPasswordEncoder`            | 替代完整 security starter，仅加密算法无过滤链 |
 | `lombok`（optional）                                   | 全部类                                            | 沿用                                          |

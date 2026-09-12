@@ -16,6 +16,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 
@@ -35,14 +36,6 @@ public class UserService {
      * 用户注册
      */
     public UserVO register(UserRegisterRequest request) {
-        // 检查用户名是否已存在
-        long count = userMapper.selectCountByQuery(
-                QueryWrapper.create().where(USER.USERNAME.eq(request.getUsername()))
-        );
-        if (count > 0) {
-            throw new BusinessException(ErrorCode.REGISTER_ERROR, "用户名已存在");
-        }
-
         // BCrypt 加密密码
         String encodedPassword = BCryptUtils.encode(request.getPassword());
 
@@ -57,7 +50,13 @@ public class UserService {
                 .status(1)
                 .build();
 
-        userMapper.insert(user);
+        try {
+            userMapper.insert(user); // ① 交给数据库，唯一索引原子把关
+        } catch (DuplicateKeyException e) {  // ② 接住被拒的请求
+            // uk_username 唯一索引兜底，并发注册同名用户时在此拦截
+            log.warn("用户名重复被唯一索引拦截: username={}", request.getUsername());
+            throw new BusinessException(ErrorCode.REGISTER_ERROR, "用户名已存在"); // ③ 转业务提示
+        }
 
         return toUserVO(user);
     }

@@ -38,7 +38,7 @@ Spring Boot 4.1 + Vue 3 + TypeScript + MyBatis-Flex 全栈项目（当前为初�
 - **ORM**：MyBatis-Flex（含代码生成器 `mybatis-flex-codegen`，TableDef 由生成器产出，不手写）
 - **数据库**：MySQL + HikariCP 连接池
 - **缓存**：Redis（含 commons-pool2 连接池）+ Caffeine 本地缓存
-- **接口文档**：Knife4j（OpenAPI 3，启动后访问默认 doc 地址）
+- **接口文档**：Knife4j（OpenAPI 3，地址 `http://localhost:8120/api/doc.html`；端口 8120、context path `/api` 见 `ai-web/src/main/resources/application-prod.yml`）
 - **工具库**：Hutool、Lombok、Spring AOP
 
 ### 前端（ai-java-front/）

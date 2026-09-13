@@ -31,6 +31,12 @@
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
+        <!-- Bean Validation（springdoc / @Valid 需要实现，Boot 4 不再由 webmvc 传递） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
         <!-- Spring Security (BCrypt + 安全基线) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -53,6 +59,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- JDBC（Boot 4 把数据源自动配置拆到独立 starter，不再由 webmvc 传递） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+
         <!-- mysql -->
         <dependency>
             <groupId>com.mysql</groupId>
@@ -60,16 +72,20 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- 数据库连接池 -->
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-        </dependency>
-
-        <!-- Spring Data Redis -->
+        <!-- Spring Data Redis：Spring AI Redis 向量库要求 JedisConnectionFactory，不能用 Boot 默认的 Lettuce -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.lettuce</groupId>
+                    <artifactId>lettuce-core</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
         </dependency>
 
         <!-- Redis 连接池 -->
@@ -84,16 +100,16 @@
             <artifactId>hutool-all</artifactId>
         </dependency>
 
-        <!-- knife4j 接口文档 -->
+        <!-- knife4j-next Boot 4 专用 starter（包名/配置键/doc.html 入口保持不变） -->
         <dependency>
-            <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+            <groupId>com.baizhukui</groupId>
+            <artifactId>knife4j-openapi3-boot4-spring-boot-starter</artifactId>
         </dependency>
 
         <!-- mybatis-flex -->
         <dependency>
             <groupId>com.mybatis-flex</groupId>
-            <artifactId>mybatis-flex-spring-boot3-starter</artifactId>
+            <artifactId>mybatis-flex-spring-boot4-starter</artifactId>
         </dependency>
         <dependency>
             <groupId>com.mybatis-flex</groupId>

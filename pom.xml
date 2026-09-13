@@ -39,16 +39,27 @@
         <java.version>21</java.version>
         <lombok.version>1.18.36</lombok.version>
         <hutool.version>5.8.38</hutool.version>
-        <knife4j.version>4.2.0</knife4j.version>
-        <mybatis-flex.version>1.11.0</mybatis-flex.version>
+        <knife4j.version>5.7.1</knife4j.version>
+        <mybatis-flex.version>1.11.8</mybatis-flex.version>
         <jjwt.version>0.12.6</jjwt.version>
-        <swagger-annotations.version>2.2.9</swagger-annotations.version>
+        <swagger-annotations.version>2.2.47</swagger-annotations.version>
         <spring-ai.version>2.0.0</spring-ai.version>
         <tika.version>2.9.4</tika.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- 必须排在 tika-bom 之前。tika-bom 2.9.4 会把 reactor-netty 锁到 1.2.3、netty 锁到 4.2.0.Final，
+                 覆盖 Spring Boot 4.1 管理的版本。Boot 4.1 的 ReactiveHttpClient 依赖 reactor-netty 1.2.5+
+                 的 ClientTransport.ResolvedAddressSelector，1.2.3 启动即 ClassNotFoundException。 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>4.1.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- 内部模块：ai-agent -->
             <dependency>
                 <groupId>com.ai</groupId>
@@ -95,17 +106,17 @@
                 <version>${hutool.version}</version>
             </dependency>
 
-            <!-- knife4j 接口文档 -->
+            <!-- knife4j-next：Boot 4 专用 starter（springdoc 3.x） -->
             <dependency>
-                <groupId>com.github.xiaoymin</groupId>
-                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <groupId>com.baizhukui</groupId>
+                <artifactId>knife4j-openapi3-boot4-spring-boot-starter</artifactId>
                 <version>${knife4j.version}</version>
             </dependency>
 
-            <!-- mybatis-flex -->
+            <!-- mybatis-flex（Boot 4 专用 starter；boot3 starter 引用的 DataSourceAutoConfiguration 包名在 Boot 4 已变更） -->
             <dependency>
                 <groupId>com.mybatis-flex</groupId>
-                <artifactId>mybatis-flex-spring-boot3-starter</artifactId>
+                <artifactId>mybatis-flex-spring-boot4-starter</artifactId>
                 <version>${mybatis-flex.version}</version>
             </dependency>
             <dependency>

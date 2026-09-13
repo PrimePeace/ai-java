@@ -19,6 +19,21 @@ spring:
     username: root
     password: 123456
 
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # Spring AI Redis VectorStore 只注入 JedisConnectionFactory，不能走 Boot 默认 Lettuce
+      client-type: jedis
+
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:sk-placeholder}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+    vectorstore:
+      redis:
+        initialize-schema: false
+
 jwt:
   secret: "your-256-bit-secret-key-here-must-be-at-least-32-chars" # >= 256 bit
   access-token-expiration: 7200 # 2h (秒)

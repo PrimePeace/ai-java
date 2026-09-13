@@ -6,7 +6,7 @@
 
 **Architecture:** 新建 Maven 模块 `ai-agent`（业务内聚）依赖 ai-basic；ai-web 只做装配。MySQL 存业务态（5 张表），Redis 只存 HNSW 向量（metadata 带 kbId 隔离），云端 OpenAI 兼容 API（智谱）提供 chat + embedding。摄取异步状态机，问答手动检索拼 Prompt + Flux SSE。
 
-**Tech Stack:** Spring Boot 4.1 + Spring AI 2.0（openai / redis vector store / mcp server webmvc）+ Apache Tika 2.9 + MyBatis-Flex + Vue 3 + TS + Naive UI
+**Tech Stack:** Spring Boot 4.1 + Spring AI 2.0（openai / redis vector store / mcp server webmvc）+ Apache Tika 2.9 + MyBatis-Flex `spring-boot4-starter` 1.11.8 + Redis **Jedis**（非 Lettuce）+ knife4j-next Boot4 starter 5.7.1 + Vue 3 + TS + Naive UI
 
 **设计文档**：`docs/superpowers/specs/ai-agent 智能体模块设计文档.md`（所有决策依据，实现遇疑问先查它）
 
@@ -31,7 +31,7 @@
 | 阶段     | 任务       | 内容                                          |
 | -------- | ---------- | --------------------------------------------- |
 | 0 前置   | Task 0     | 环境验证清单 + 拦截器生效实测                 |
-| 1 骨架   | Task 1-3   | 根 POM / ai-agent POM / ai-web POM            |
+| 1 骨架   | Task 1-3   | 根 POM / ai-agent POM / ai-web POM（含 Boot 4.1 依赖兼容） |
 | 2 数据层 | Task 4-6   | DDL / 实体 / Mapper                           |
 | 3 基础   | Task 7-9   | AgentProperties / 全局异常 / 线程池           |
 | 4 摄取   | Task 10-11 | 解析切分管道 / 摄取服务                       |
@@ -105,20 +105,36 @@ mvn dependency:tree -pl ai-agent | grep -i mcp
 - Modify: `pom.xml`（根）
 - 文档同步：设计文档 9.1
 
-- [ ] **Step 1: properties 增加版本号**
+- [ ] **Step 1: properties 增加 / 对齐版本号**
 
-在根 POM `<properties>` 中追加：
+在根 POM `<properties>` 中追加，并同步升级已有条目（Boot 4.1 实测）：
 
 ```xml
+<knife4j.version>5.7.1</knife4j.version>
+<mybatis-flex.version>1.11.8</mybatis-flex.version>
+<swagger-annotations.version>2.2.47</swagger-annotations.version>
 <spring-ai.version>2.0.0</spring-ai.version>
 <tika.version>2.9.4</tika.version>
 ```
 
-- [ ] **Step 2: dependencyManagement 增加 BOM 与内部模块**
+说明：旧值 `knife4j 4.2.0`（`com.github.xiaoymin` + springdoc 2.x）与 `mybatis-flex-spring-boot3-starter 1.11.0` 在 Boot 4.1 上无法正确自动配置。
 
-`<dependencyManagement><dependencies>` 中追加（放在内部模块注释块之后）：
+- [ ] **Step 2: dependencyManagement 增加 BOM 与内部模块（顺序强制）**
+
+Maven 就近优先：当前 POM 里 **先 import 的 BOM 赢**。`tika-bom 2.9.4` 会把 `reactor-netty` 锁到 **1.2.3**、`netty` 锁到 **4.2.0.Final**，覆盖 Boot 4.1 的 1.3.6 / 4.2.15.Final。Boot 4.1 的 `ReactiveHttpClientAutoConfiguration` 需要 reactor-netty **1.2.5+** 的 `ClientTransport.ResolvedAddressSelector`，1.2.3 启动即 `ClassNotFoundException`。
+
+因此 **必须把 `spring-boot-dependencies` 放在 `tika-bom` / `spring-ai-bom` 之前**：
 
 ```xml
+<!-- 必须排在 tika-bom 之前，锁定 Boot 4.1 的 reactor-netty 1.3.6 / netty 4.2.15.Final -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-dependencies</artifactId>
+    <version>4.1.0</version>
+    <type>pom</type>
+    <scope>import</scope>
+</dependency>
+
 <!-- 内部模块：ai-agent -->
 <dependency>
     <groupId>com.ai</groupId>
@@ -142,6 +158,21 @@ mvn dependency:tree -pl ai-agent | grep -i mcp
     <version>${tika.version}</version>
     <type>pom</type>
     <scope>import</scope>
+</dependency>
+```
+
+根 POM 中 knife4j / mybatis-flex 管理坐标同步改为：
+
+```xml
+<dependency>
+    <groupId>com.baizhukui</groupId>
+    <artifactId>knife4j-openapi3-boot4-spring-boot-starter</artifactId>
+    <version>${knife4j.version}</version>
+</dependency>
+<dependency>
+    <groupId>com.mybatis-flex</groupId>
+    <artifactId>mybatis-flex-spring-boot4-starter</artifactId>
+    <version>${mybatis-flex.version}</version>
 </dependency>
 ```
 
@@ -315,6 +346,58 @@ mvn validate -q
     <groupId>com.ai</groupId>
     <artifactId>ai-agent</artifactId>
 </dependency>
+```
+
+同时把 ai-web 依赖对齐 Boot 4.1（启动实测，缺一即 `APPLICATION FAILED TO START`）：
+
+| 项 | 旧 | 新 | 原因 |
+| --- | --- | --- | --- |
+| JDBC | 仅 HikariCP | `spring-boot-starter-jdbc` | Boot 4 把数据源自动配置拆出 webmvc |
+| MyBatis-Flex | `mybatis-flex-spring-boot3-starter` | `mybatis-flex-spring-boot4-starter` | boot3 starter 引用的 `DataSourceAutoConfiguration` 包名在 Boot 4 已变 |
+| Redis 客户端 | Lettuce（starter 默认） | **排除 lettuce + 显式 `jedis`** | `RedisVectorStoreAutoConfiguration` 只注入 `JedisConnectionFactory` |
+| knife4j | `com.github.xiaoymin:...-jakarta...:4.2.0` | `com.baizhukui:knife4j-openapi3-boot4-spring-boot-starter:5.7.1` | 4.2.0 走 springdoc 2.x，Boot 4 上 `TypeNotPresentException`；包名/配置键/`doc.html` 入口不变 |
+| Validation | 无 | `spring-boot-starter-validation` | Boot 4 webmvc 不再传递 Hibernate Validator；springdoc / `@Valid` 需要实现 |
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-jdbc</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+    <exclusions>
+        <exclusion>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+<dependency>
+    <groupId>redis.clients</groupId>
+    <artifactId>jedis</artifactId>
+</dependency>
+<dependency>
+    <groupId>com.baizhukui</groupId>
+    <artifactId>knife4j-openapi3-boot4-spring-boot-starter</artifactId>
+</dependency>
+<dependency>
+    <groupId>com.mybatis-flex</groupId>
+    <artifactId>mybatis-flex-spring-boot4-starter</artifactId>
+</dependency>
+```
+
+`MyBatisFlexConfig` 只保留 `@MapperScan`（数据源交给 boot4 starter + jdbc starter）：
+
+```java
+@Configuration
+@MapperScan({"com.ai.aijava.mapper", "com.ai.aijava.agent.mapper"})
+public class MyBatisFlexConfig {
+}
 ```
 
 - [ ] **Step 2: 全模块编译**
@@ -745,7 +828,9 @@ public class ChatMessage {
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/mapper/KnowledgeBaseMapper.java`（其余 4 个同目录）
 - 文档同步：设计文档 9.6
 
-- [ ] **Step 1: 五个 Mapper（@Mapper 注解，启动类包扫描自动注册，无需 @MapperScan）**
+- [ ] **Step 1: 五个 Mapper（`@Mapper` + 必须扫 `com.ai.aijava.agent.mapper`）**
+
+仅有 `@Mapper` **不够**。`ai-web` 的 `MyBatisFlexConfig` 若只写 `@MapperScan("com.ai.aijava.mapper")`，agent Mapper 不会注册，启动报 `No qualifying bean of type '...agent.mapper.KnowledgeBaseMapper'`。扫描包必须包含 `com.ai.aijava.agent.mapper`（见 Task 3）。
 
 ```java
 package com.ai.aijava.agent.mapper;
@@ -3134,6 +3219,8 @@ spring:
     redis:
       host: localhost
       port: 6379
+      # Spring AI Redis VectorStore 只注入 JedisConnectionFactory，不能走 Boot 默认 Lettuce
+      client-type: jedis
       # password: xxx
   servlet:
     multipart:
@@ -3191,6 +3278,18 @@ mvn spring-boot:run -pl ai-web  # 启动成功即可，不运行完整链路
 ```
 
 预期：应用启动正常，无 Redis 连接失败以外的 ERROR（Redis 若未连会报连接异常属正常；MySQL 正常连）。
+
+启动命令必须指定模块，不要带 `-am` 把插件跑到父 POM 上：
+
+```bash
+mvn -pl ai-web spring-boot:run
+```
+
+健康检查：`GET http://localhost:8120/api/health/` → `{"code":0,"data":"ok"}`。  
+接口文档：`http://localhost:8120/api/doc.html`（Knife4j Next / springdoc 3.x / OpenAPI 3.1）。
+
+若仍出现 `ClientTransport$ResolvedAddressSelector not found`，回头检查 Task 1 的 BOM 顺序（tika-bom 不得盖过 Boot BOM）。
+若报找不到 `JedisConnectionFactory`，检查 lettuce 是否已排除且 `spring.data.redis.client-type=jedis`。
 
 - [ ] **Step 3: 用户 commit（建议信息）**
 
@@ -4845,7 +4944,7 @@ mysql -uroot -p -e "select request_params from ai_java.audit_log where operation
 | 5.4 DTO                 | Task 12                 | ✅   |
 | 5.5 决策                | 各任务实现中体现        | ✅   |
 | 6 前端                  | Task 21-27              | ✅   |
-| 7 依赖                  | Task 1-3                | ✅   |
+| 7 依赖                  | Task 1-3（含 Boot 4.1 BOM/Jedis/knife4j-next/flex-boot4 实测修正） | ✅   |
 | 8 配置                  | Task 20                 | ✅   |
 | 9 实现代码              | 各任务代码即第 9 章内容 | ✅   |
 | 10 验证                 | Task 28                 | ✅   |
@@ -4863,7 +4962,18 @@ mysql -uroot -p -e "select request_params from ai_java.audit_log where operation
 - DocStatus 枚举前端用中文值（与后端 DB 存储的 String 枚举名一致）
 - `ChatSession.DEFAULT_TITLE = "新会话"` 与前端 `ChatSession.title` 初始化一致
 
-### 4. 范围检查
+### 4. Boot 4.1 依赖兼容（启动实测，已写入 Task 1/3/6/20）
+
+| 现象 | 根因 | 修正 |
+| --- | --- | --- |
+| `ClassNotFoundException: ClientTransport$ResolvedAddressSelector` | `tika-bom 2.9.4` 把 reactor-netty 锁成 1.2.3；Boot 4.1 需要 1.2.5+（实际 1.3.6） | 当前 POM 最先 import `spring-boot-dependencies 4.1.0` |
+| `DataSourceAutoConfiguration` TypeNotPresent / Mapper 未注册 | boot3 starter + 只扫 `com.ai.aijava.mapper` | `mybatis-flex-spring-boot4-starter` 1.11.8 + `spring-boot-starter-jdbc` + `@MapperScan` 含 `agent.mapper` |
+| 找不到 `JedisConnectionFactory` | Boot Redis 默认 Lettuce；Spring AI Redis 向量库只要 Jedis | 排除 lettuce、加 jedis、`client-type: jedis` |
+| knife4j `TypeNotPresentException` | 4.2.0 / springdoc 2.x 不认 Boot 4 条件注解 | `com.baizhukui:knife4j-openapi3-boot4-spring-boot-starter:5.7.1`（springdoc 3.0.3） |
+
+解析结果应对齐：`reactor-netty-http 1.3.6`、`netty 4.2.15.Final`、`reactor-core 3.8.6`、`springdoc-openapi-starter-webmvc-ui 3.0.3`。
+
+### 5. 范围检查
 
 - 未做模型微调、用户反馈闭环、多模态、Agent 工具调用、知识库分享、计费（符合 YAGNI）
 - 列表不分页（MVP 小数据量）

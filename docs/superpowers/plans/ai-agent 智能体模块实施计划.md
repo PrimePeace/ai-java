@@ -2454,11 +2454,16 @@ feat: 知识库/文档管理——CRUD、级联删除、审计接入
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/service/ChatSessionService.java`
 - 文档同步：设计文档 9.15
 
+Boot 4 不自动装配 Jackson 2 的 `com.fasterxml.jackson.databind.ObjectMapper` Bean（webmvc 也不再传递 jackson-databind）。citations JSON 用 Hutool `JSONUtil`（审计日志同一套，经 ai-basic 的 `hutool-all` 传递，无需注入 Bean）。
+
+Spring AI 2.0 消息类在 `org.springframework.ai.chat.messages`（**复数**）。`UserMessage` / `AssistantMessage` 用 `new Xxx(text)` 构造，没有 `.from()`。
+
 - [ ] **Step 1: 完整代码**
 
 ```java
 package com.ai.aijava.agent.service;
 
+import cn.hutool.json.JSONUtil;
 import com.ai.aijava.agent.dto.request.ChatSessionCreateRequest;
 import com.ai.aijava.agent.dto.vo.ChatMessageVO;
 import com.ai.aijava.agent.dto.vo.ChatSessionVO;
@@ -2466,23 +2471,23 @@ import com.ai.aijava.agent.dto.vo.CitationVO;
 import com.ai.aijava.agent.entity.ChatMessage;
 import com.ai.aijava.agent.entity.ChatSession;
 import com.ai.aijava.agent.entity.KnowledgeBase;
-import com.ai.aijava.agent.entity.KnowledgeDocument;
 import com.ai.aijava.agent.mapper.ChatMessageMapper;
 import com.ai.aijava.agent.mapper.ChatSessionMapper;
 import com.ai.aijava.agent.mapper.KnowledgeBaseMapper;
-import com.ai.aijava.agent.mapper.KnowledgeDocumentMapper;
 import com.ai.aijava.context.UserContext;
 import com.ai.aijava.exception.BusinessException;
 import com.ai.aijava.exception.ErrorCode;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -2493,13 +2498,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ChatSessionService {
 
-    private static final TypeReference<List<CitationVO>> CITATION_TYPE = new TypeReference<>() {};
-
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageMapper chatMessageMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
-    private final KnowledgeDocumentMapper knowledgeDocumentMapper;
-    private final ObjectMapper objectMapper;
 
     /**
      * 创建会话（kbId 绑定，title 默认）
@@ -2561,7 +2562,7 @@ public class ChatSessionService {
      * 历史消息（全量，按 id 升序即时间序；含 citations 反序列化）
      */
     public List<ChatMessageVO> listMessages(Long sessionId) {
-        ChatSession session = getOwnedSession(sessionId);
+        getOwnedSession(sessionId);
         return chatMessageMapper.selectListByQuery(
                         QueryWrapper.create()
                                 .where(ChatMessage::getSessionId).eq(sessionId)
@@ -2570,8 +2571,8 @@ public class ChatSessionService {
                     List<CitationVO> cites = null;
                     if (msg.getCitations() != null && !msg.getCitations().isBlank()) {
                         try {
-                            cites = objectMapper.readValue(msg.getCitations(), CITATION_TYPE);
-                        } catch (JsonProcessingException e) {
+                            cites = JSONUtil.toList(msg.getCitations(), CitationVO.class);
+                        } catch (Exception e) {
                             log.warn("citations JSON 解析失败", e);
                         }
                     }
@@ -2650,31 +2651,26 @@ public class ChatSessionService {
      *
      * 设计 4.2 决策 #6：流失败遗留的无应答 user 不进 history，防止模型看到连续 user 无 assistant
      */
-    public List<org.springframework.ai.chat.message.Message> getHistory(Long sessionId, int historyRounds) {
-        // id desc 取最近 2*historyRounds 条
+    public List<Message> getHistory(Long sessionId, int historyRounds) {
         int limit = historyRounds * 2;
-        List<ChatMessage> msgs = chatMessageMapper.selectListByQuery(
+        List<ChatMessage> msgs = new ArrayList<>(chatMessageMapper.selectListByQuery(
                 QueryWrapper.create()
                         .select(ChatMessage::getRole, ChatMessage::getContent)
                         .where(ChatMessage::getSessionId).eq(sessionId)
                         .orderBy(ChatMessage::getId, false)
-                        .limit(limit));
+                        .limit(limit)));
         if (msgs.isEmpty()) {
             return List.of();
         }
-        // 反转为时间正序
-        msgs = msgs.reversed();
-        // 丢弃末尾连续的孤立 user 消息（只丢弃最末一段纯 user）
-        while (!msgs.isEmpty() && msgs.get(msgs.size() - 1).getRole().equals(ChatMessage.ROLE_USER)) {
+        Collections.reverse(msgs);
+        while (!msgs.isEmpty() && ChatMessage.ROLE_USER.equals(msgs.getLast().getRole())) {
             msgs.removeLast();
         }
-        // 转为 Spring AI Message
-        return msgs.stream().map(m -> {
-            if (m.getRole().equals(ChatMessage.ROLE_USER)) {
-                return org.springframework.ai.chat.message.UserMessage.from(m.getContent());
-            } else {
-                return org.springframework.ai.chat.message.AssistantMessage.from(m.getContent());
+        return msgs.stream().<Message>map(m -> {
+            if (ChatMessage.ROLE_USER.equals(m.getRole())) {
+                return new UserMessage(m.getContent());
             }
+            return new AssistantMessage(m.getContent());
         }).toList();
     }
 
@@ -2698,6 +2694,14 @@ public class ChatSessionService {
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/service/RagChatService.java`
 - 文档同步：设计文档 9.16
 
+citations 序列化同样用 `JSONUtil.toJsonStr`（不注入 `ObjectMapper`）。`SystemMessage` / `UserMessage` 包名与 Task 15 相同：`org.springframework.ai.chat.messages`。
+
+Spring AI 2.0.0 实测：
+
+- `Prompt` **没有** `Prompt(List, List)`。`new Prompt(history, List.of(system, user))` 会匹配 `Prompt(List<Message>, ChatOptions)`，无法编译。正确做法：拼成一条 `List<Message>`（system → history → 当前 user）再 `new Prompt(messages)`。
+- `ChatResponse.getResult().getOutput().getText()` 在 2.0.0 仍然存在（`getResult()` + `Generation.getOutput()` → `AssistantMessage.getText()`）。
+- 摄取侧 metadata 只写了 `kbId` / `docId`（均为 String），没有 `chunkIndex` / `score`。引用里的 score 用 `Document.getScore()`；chunkIndex 缺省为 0。Redis 回读的 metadata 值可能是 String，禁止直接 `(Integer)` / `(Long)` 强转。
+
 - [ ] **Step 1: 完整代码**
 
 ```java
@@ -2708,18 +2712,18 @@ import com.ai.aijava.agent.dto.vo.CitationVO;
 import com.ai.aijava.agent.entity.KnowledgeDocument;
 import com.ai.aijava.agent.enums.DocStatus;
 import com.ai.aijava.agent.mapper.KnowledgeDocumentMapper;
+import cn.hutool.json.JSONUtil;
 import com.ai.aijava.exception.BusinessException;
 import com.ai.aijava.exception.ErrorCode;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.prompt.SystemPromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -2746,7 +2750,6 @@ public class RagChatService {
     private final AgentProperties agentProperties;
     private final KnowledgeDocumentMapper knowledgeDocumentMapper;
     private final ChatSessionService chatSessionService;
-    private final ObjectMapper objectMapper;
 
     /**
      * 会话提问 → SSE Flux（4.2 事件协议）
@@ -2766,8 +2769,11 @@ public class RagChatService {
                         .filterExpression("kbId == '" + kbId + "'")
                         .build());
 
-        // 过滤脏向量（只保留所属文档 status=COMPLETED 的 hits）
+        // 过滤脏向量（只保留所属文档 status=COMPLETED 的 hits），再截前 topK
         List<Document> hits = filterCompleted(rawHits);
+        if (hits.size() > topK) {
+            hits = new ArrayList<>(hits.subList(0, topK));
+        }
 
         // 构建 citations（含 docName）
         List<CitationVO> citations = buildCitations(hits);
@@ -2775,20 +2781,22 @@ public class RagChatService {
         // 历史（丢弃末尾孤立 user）
         List<Message> history = chatSessionService.getHistory(sessionId, agentProperties.getHistoryRounds());
 
-        // 拼装 Prompt
+        // 拼装 Prompt：system → history → 当前 user（2.0 只有 Prompt(List<Message>) / Prompt(List, ChatOptions)）
         String refText = buildReferences(hits);
         String userText = (refText.isBlank() ? "" : "参考资料：\n" + refText + "\n\n")
                 + "问题：" + question;
-        Prompt prompt = new Prompt(history, List.of(
-                new org.springframework.ai.chat.message.SystemMessage(agentProperties.effectiveSystemPrompt()),
-                new org.springframework.ai.chat.message.UserMessage(userText)));
+        List<Message> messages = new ArrayList<>(history.size() + 2);
+        messages.add(new SystemMessage(agentProperties.effectiveSystemPrompt()));
+        messages.addAll(history);
+        messages.add(new UserMessage(userText));
+        Prompt prompt = new Prompt(messages);
 
         // user 消息落库
         chatSessionService.saveUserMessage(sessionId, question);
         chatSessionService.updateTitleIfNeeded(sessionId, question);
 
         // 流式生成 + 装配 SSE
-        return assembleFlux(chatModel.stream(prompt), sessionId, citations, question);
+        return assembleFlux(chatModel.stream(prompt), sessionId, citations);
     }
 
     /**
@@ -2796,7 +2804,7 @@ public class RagChatService {
      * 设计 4.2 决策 #7：onErrorResume 兜底异常转 error 事件
      */
     private Flux<ServerSentEvent<String>> assembleFlux(Flux<ChatResponse> responseFlux, Long sessionId,
-                                                        List<CitationVO> citations, String question) {
+                                                        List<CitationVO> citations) {
         StringBuilder aggregated = new StringBuilder();
         return responseFlux
                 .doOnNext(chunk -> {
@@ -2819,29 +2827,18 @@ public class RagChatService {
                 })
                 .doOnComplete(() -> {
                     try {
-                        String citationsJson = objectMapper.writeValueAsString(citations);
+                        String citationsJson = JSONUtil.toJsonStr(citations);
                         chatSessionService.saveAssistantMessage(sessionId, aggregated.toString(), citationsJson);
                         chatSessionService.refreshSessionActiveTime(sessionId);
-                    } catch (JsonProcessingException e) {
-                        log.error("citations 序列化失败，助手消息未落库", e);
                     } catch (Exception e) {
                         log.error("保存助手消息失败", e);
                     }
                 })
                 .concatWith(
-                        // citations 事件
-                        Mono.defer(() -> {
-                            try {
-                                String json = objectMapper.writeValueAsString(citations);
-                                return Flux.just(ServerSentEvent.<String>builder()
-                                        .event("citations")
-                                        .data(json)
-                                        .build());
-                            } catch (JsonProcessingException e) {
-                                log.error("citations 序列化失败", e);
-                                return Flux.empty();
-                            }
-                        }).flux())
+                        Mono.just(ServerSentEvent.<String>builder()
+                                .event("citations")
+                                .data(JSONUtil.toJsonStr(citations))
+                                .build()))
                 .concatWith(Mono.just(ServerSentEvent.<String>builder().event("end").build()))
                 .onErrorResume(e -> {
                     log.error("RAG 问答流式异常", e);
@@ -2860,18 +2857,22 @@ public class RagChatService {
         if (hits.isEmpty()) {
             return List.of();
         }
-        // 按 docId 去重回查 status
-        List<String> docIds = hits.stream()
-                .map(d -> (String) d.getMetadata().getOrDefault("docId", ""))
-                .distinct().toList();
-        List<String> completedDocIds = knowledgeDocumentMapper.selectListByQuery(
+        List<Long> docIds = hits.stream()
+                .map(d -> parseLongMeta(d, "docId"))
+                .filter(id -> id > 0)
+                .distinct()
+                .toList();
+        if (docIds.isEmpty()) {
+            return List.of();
+        }
+        java.util.Set<String> completedDocIds = knowledgeDocumentMapper.selectListByQuery(
                         QueryWrapper.create()
                                 .select(KnowledgeDocument::getId)
-                                .where(KnowledgeDocument::getId).in(docIds.stream().map(Long::parseLong).toList())
+                                .where(KnowledgeDocument::getId).in(docIds)
                                 .and(KnowledgeDocument::getStatus).eq(DocStatus.COMPLETED.name()))
-                .stream().map(d -> String.valueOf(d.getId())).toList();
+                .stream().map(d -> String.valueOf(d.getId())).collect(java.util.stream.Collectors.toSet());
         return hits.stream()
-                .filter(d -> completedDocIds.contains(d.getMetadata().getOrDefault("docId", "")))
+                .filter(d -> completedDocIds.contains(String.valueOf(parseLongMeta(d, "docId"))))
                 .toList();
     }
 
@@ -2882,7 +2883,7 @@ public class RagChatService {
         List<CitationVO> result = new ArrayList<>();
         // 按 docId 批量查 docName
         List<Long> docIds = hits.stream()
-                .map(d -> Long.parseLong((String) d.getMetadata().getOrDefault("docId", "0")))
+                .map(d -> parseLongMeta(d, "docId"))
                 .filter(id -> id > 0).distinct().toList();
         Map<Long, String> nameMap = Map.of();
         if (!docIds.isEmpty()) {
@@ -2893,10 +2894,10 @@ public class RagChatService {
                     .stream().collect(java.util.stream.Collectors.toMap(KnowledgeDocument::getId, KnowledgeDocument::getFileName));
         }
         for (Document doc : hits) {
-            Long chunkId = Long.parseLong(doc.getId());
-            Long docId = Long.parseLong((String) doc.getMetadata().getOrDefault("docId", "0"));
-            Integer chunkIndex = (Integer) doc.getMetadata().getOrDefault("chunkIndex", 0);
-            Double score = (Double) doc.getMetadata().getOrDefault("score", 0.0);
+            Long chunkId = parseLongId(doc.getId());
+            Long docId = parseLongMeta(doc, "docId");
+            Integer chunkIndex = parseIntMeta(doc, "chunkIndex");
+            Double score = doc.getScore() != null ? doc.getScore() : 0.0;
             String content = doc.getText();
             // 节选前 150 字
             if (content != null && content.length() > 150) {
@@ -2924,12 +2925,38 @@ public class RagChatService {
         }
         return sb.toString();
     }
+
+    private static long parseLongMeta(Document doc, String key) {
+        Object v = doc.getMetadata().get(key);
+        return parseLongId(v == null ? null : String.valueOf(v));
+    }
+
+    private static int parseIntMeta(Document doc, String key) {
+        Object v = doc.getMetadata().get(key);
+        if (v == null) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(v));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static long parseLongId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
+    }
 }
 ```
 
-注意：`ChatResponse` 的 `getResult().getOutput().getText()` 路径需确认 Spring AI 2.0 API 是否匹配。
-若 `ChatResponse.getResult()` 改为 `chatResponse.getResults().get(0)`（List<Result>），则需调整。
-**实现前验证**：`ChatModel.stream(Prompt)` 返回 `Flux<ChatResponse>`，`ChatResponse` 取文本用 `response.getResult().getOutput().getText()` 是 1.0.x 写法，2.0 可能变化。
+说明：`ChatModel.stream(Prompt)` 返回 `Flux<ChatResponse>`；MVC 返回该 Flux 作为 SSE 即可（reactor 由 Spring AI 传递，**不要**再加 `spring-boot-starter-webflux`，否则与 webmvc 冲突）。
 
 ### Task 17: ChatController（SSE 端点）
 
@@ -2937,6 +2964,8 @@ public class RagChatService {
 
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/controller/ChatController.java`
 - 文档同步：设计文档 9.17
+
+MVC 可直接返回 `Flux<ServerSentEvent<String>>` + `produces = TEXT_EVENT_STREAM`（Spring Framework 对 reactor 类型有内置支持）。不要为此引入 WebFlux starter。
 
 - [ ] **Step 1: 完整代码**
 
@@ -2964,6 +2993,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
@@ -2992,7 +3022,7 @@ public class ChatController {
     @RequireLogin
     @GetMapping("/session/list")
     public BaseResponse<List<ChatSessionVO>> listSessions(
-            @org.springframework.web.bind.annotation.RequestParam(required = false) Long kbId) {
+            @RequestParam(required = false) Long kbId) {
         return ResultUtils.success(chatSessionService.listSessions(kbId));
     }
 
@@ -3045,6 +3075,8 @@ feat: 对话与 RAG——会话管理、流式问答（过采样过滤、SSE 事
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/config/AgentWebConfig.java`
 - 文档同步：设计文档 9.18
 
+现有 `JwtInterceptor` 只拦带 `@RequireLogin` 的方法，MCP 端点本身无该注解， naturally 不走 JWT。本任务只需再挂 `X-MCP-Token` 校验。拦截路径相对 DispatcherServlet（context-path `/api` 之后），配 `/mcp` 对应完整 URL `/api/mcp`。
+
 - [ ] **Step 1: McpSecurityInterceptor**
 
 ```java
@@ -3052,7 +3084,6 @@ package com.ai.aijava.agent.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -3066,7 +3097,6 @@ import org.springframework.web.servlet.HandlerInterceptor;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class McpSecurityInterceptor implements HandlerInterceptor {
 
     private static final String HEADER_MCP_TOKEN = "X-MCP-Token";
@@ -3132,23 +3162,18 @@ public class AgentWebConfig implements WebMvcConfigurer {
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/service/mcp/KnowledgeMcpTools.java`
 - 文档同步：设计文档 9.19
 
+`@McpTool` / `@McpToolParam` 包名 `org.springframework.ai.mcp.annotation` 在 Spring AI 2.0.0 仍然正确。类必须是 Spring Bean（`@Component`），starter 会扫描工具方法。
+
 - [ ] **Step 1: 完整代码**
 
 ```java
 package com.ai.aijava.agent.service.mcp;
 
-import com.ai.aijava.agent.dto.vo.CitationVO;
 import com.ai.aijava.agent.entity.KnowledgeBase;
-import com.ai.aijava.agent.enums.DocStatus;
 import com.ai.aijava.agent.mapper.KnowledgeBaseMapper;
-import com.ai.aijava.agent.mapper.KnowledgeDocumentMapper;
-import com.ai.aijava.exception.BusinessException;
-import com.ai.aijava.exception.ErrorCode;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.mcp.annotation.McpTool;
 import org.springframework.ai.mcp.annotation.McpToolParam;
@@ -3240,50 +3265,86 @@ feat: MCP Server——全局 token 校验、知识库检索与列举工具
 - Modify: `ai-web/src/main/resources/application-prod.yml`
 - 文档同步：设计文档 9.20
 
-- [ ] **Step 1: 在现有文件末尾追加**
+**禁止**在文件末尾再追加第二段 `spring:`。YAML 同级重复 key 后者覆盖前者，会丢掉 datasource。在现有 `spring.data.redis` / `spring.ai` / `springdoc` 上合并。
+
+- [ ] **Step 1: 合并后的目标文件（以当前仓库为底）**
 
 ```yaml
-# ==================== ai-agent 智能体模块 ====================
+server:
+  port: 8120
+  servlet:
+    context-path: /api
 
 spring:
+  application:
+    name: sa-admin
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ai_java
+    username: root
+    password: 123456
+
   data:
     redis:
       host: localhost
       port: 6379
-      # Spring AI Redis VectorStore 只注入 JedisConnectionFactory，不能走 Boot 默认 Lettuce
       client-type: jedis
-      # password: xxx
-  servlet:
-    multipart:
-      max-file-size: 20MB # 框架层上限（5.5 #5）
-      max-request-size: 25MB
+
   ai:
     openai:
-      api-key: ${AI_API_KEY} # 环境变量注入，禁止写入仓库
-      base-url: https://open.bigmodel.cn/api/paas/v4 # 智谱；换厂商改这里
+      api-key: ${AI_API_KEY:${OPENAI_API_KEY:sk-placeholder}}
+      base-url: ${OPENAI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
       chat:
         options:
           model: glm-4-flash
       embedding:
         options:
           model: embedding-3
-          dimensions: 1024 # 显式声明（智谱 embedding-3 支持 256/512/1024/2048）；
-          #                       维度一经确定不可更改，改则全量重建（3.3 #4）
+          dimensions: 1024
     vectorstore:
       redis:
-        uri: redis://localhost:6379 # Spring AI 向量库独立连接（不复用 spring.data.redis）
+        uri: redis://localhost:6379
         index-name: ai-java-kb
         prefix: "kb:vector:"
-        initialize-schema: true # 首次启动建 HNSW 索引（维度由 EmbeddingModel 推断）
+        initialize-schema: true
     mcp:
       server:
         name: ai-java-knowledge
         version: 1.0.0
         type: SYNC
-        protocol: STREAMABLE # SSE 自 2.0.0 deprecated；客户端仅支持 SSE 时改回 SSE
+        protocol: STREAMABLE
         streamable-http:
-          mcp-endpoint: /mcp # 实际完整路径 /api/mcp（受 server.servlet.context-path 影响）
+          mcp-endpoint: /mcp
           keep-alive-interval: 30s
+
+jwt:
+  secret: "your-256-bit-secret-key-here-must-be-at-least-32-chars"
+  access-token-expiration: 7200
+  refresh-token-expiration: 604800
+
+audit:
+  log:
+    retention-days: 180
+
+springdoc:
+  group-configs:
+    - group: "default"
+      paths-to-match: "/**"
+      packages-to-scan: com.ai.aijava
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
 
 agent:
   upload-dir: ./uploads
@@ -3292,12 +3353,17 @@ agent:
   chunk-size: 800
   top-k: 5
   history-rounds: 10
-  # system-prompt: 覆盖内置默认提示词（可选）
 
 mcp:
   security:
-    token: ${MCP_TOKEN:} # MCP 端点校验 token；为空时启动打告警日志并放行
+    token: ${MCP_TOKEN:}
 ```
+
+说明：
+
+- `packages-to-scan` 改为 `com.ai.aijava`，否则 Knife4j 扫不到 `agent.controller`。
+- `initialize-schema: true` 仅首次建 HNSW 索引；索引已存在后可改回 `false`。
+- 启动命令：`mvn -pl ai-web spring-boot:run`（不要 `-am`）。
 
 - [ ] **Step 2: 编译验证 + 冒烟启动**
 
@@ -3349,13 +3415,20 @@ npm i -D @vicons/ionicons5
 - [ ] **Step 2: types/ai.ts 完整代码**
 
 ```typescript
-// 文档状态机
+// 与后端 DocStatus.name() 对齐（DB 存 UPLOADED/PROCESSING/COMPLETED/FAILED）
 export enum DocStatus {
-  UPLOADED = "已上传",
-  PROCESSING = "处理中",
-  COMPLETED = "已完成",
-  FAILED = "失败",
+  UPLOADED = "UPLOADED",
+  PROCESSING = "PROCESSING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
 }
+
+export const DOC_STATUS_LABEL: Record<DocStatus, string> = {
+  [DocStatus.UPLOADED]: "已上传",
+  [DocStatus.PROCESSING]: "处理中",
+  [DocStatus.COMPLETED]: "已完成",
+  [DocStatus.FAILED]: "失败",
+};
 
 export interface KnowledgeBase {
   id: number;
@@ -3477,7 +3550,7 @@ export function uploadDocumentApi(
   const formData = new FormData();
   formData.append("file", file);
   return request.post(`/kb/${kbId}/document/upload`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 120000,
   });
 }
 
@@ -3490,7 +3563,7 @@ export function listDocumentsApi(
 
 /** 删除文档 */
 export function deleteDocumentApi(docId: number): Promise<BaseResponse<null>> {
-  return request.delete(`/document/${docId}`);
+  return request.delete(`/kb/document/${docId}`);
 }
 ```
 
@@ -3558,8 +3631,8 @@ export interface UseChatStreamOptions {
 }
 
 export interface UseChatStreamReturn {
-  abortController: AbortController;
   send: (sessionId: number, question: string) => Promise<void>;
+  abort: () => void;
   isStreaming: Ref<boolean>;
   assistantContent: Ref<string>;
 }
@@ -3573,7 +3646,7 @@ export function useChatStream(
 ): UseChatStreamReturn {
   const isStreaming = ref(false);
   const assistantContent = ref("");
-  let abortController: AbortController;
+  let abortController: AbortController | undefined;
 
   async function send(sessionId: number, question: string) {
     abortController = new AbortController();
@@ -3619,17 +3692,16 @@ export function useChatStream(
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
-        // { stream: true } 处理中文等多字节跨 chunk 截断
         buffer += decoder.decode(value, { stream: true });
-        parseBuffer(buffer, (event, data) => {
-          consumeEvent(event, data, options);
-          buffer = buffer.slice(
-            buffer.indexOf("\n\n") !== -1
-              ? buffer.indexOf("\n\n") + 2
-              : buffer.length,
-          );
-        });
+        let sep;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          const parsed = parseFrame(frame);
+          if (parsed) {
+            consumeEvent(parsed.event, parsed.data, options);
+          }
+        }
       }
     } catch (e: any) {
       if (e.name === "AbortError") return;
@@ -3645,44 +3717,33 @@ export function useChatStream(
     isStreaming.value = false;
   }
 
-  return { abortController, send, isStreaming, assistantContent };
+  return { send, abort, isStreaming, assistantContent };
 }
 
-function parseBuffer(
-  buffer: string,
-  onFrame: (event: string, data: string) => void,
-) {
-  // 按空行分帧
-  const frames = buffer.split(/\n\n/);
-  // 最后一个帧可能不完整，保留到下次
-  const lastIdx = frames.length - 1;
-  for (let i = 0; i < lastIdx; i++) {
-    const frame = frames[i].trim();
-    if (!frame) continue;
-
-    let event = "message"; // 默认
-    let dataLines: string[] = [];
-
-    for (const line of frame.split(/\r?\n/)) {
-      // 忽略注释行、id:、retry:
-      if (
-        line.startsWith(":") ||
-        line.startsWith("id:") ||
-        line.startsWith("retry:")
-      )
-        continue;
-      if (line.startsWith("event:")) {
-        event = line.slice(6).trim();
-      } else if (line.startsWith("data:")) {
-        dataLines.push(line.slice(5).trim());
-      }
+function parseFrame(frame: string): { event: string; data: string } | null {
+  const trimmed = frame.trim();
+  if (!trimmed) return null;
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of trimmed.split(/\r?\n/)) {
+    if (
+      line.startsWith(":") ||
+      line.startsWith("id:") ||
+      line.startsWith("retry:")
+    ) {
+      continue;
     }
-
-    if (dataLines.length > 0) {
-      // 多行 data: 以 \n 合并
-      onFrame(event, dataLines.join("\n"));
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
     }
   }
+  if (dataLines.length === 0 && event !== "end") {
+    if (event === "end") return { event, data: "" };
+    return null;
+  }
+  return { event, data: dataLines.join("\n") };
 }
 
 function consumeEvent(
@@ -3715,9 +3776,9 @@ function consumeEvent(
 - [ ] **Step 2: useDocumentPolling.ts 完整代码**
 
 ```typescript
-import { ref, onBeforeUnmount } from "vue";
+import { ref, onBeforeUnmount, type Ref } from "vue";
 import { listDocumentsApi } from "@/api/kb";
-import type { KnowledgeDocument } from "@/types/ai";
+import { DocStatus, type KnowledgeDocument } from "@/types/ai";
 
 /**
  * 文档状态轮询 composable
@@ -3737,7 +3798,8 @@ export function useDocumentPolling(kbId: Ref<number>) {
       documents.value = res.data;
       // 检查是否全部终态
       const allTerminal = documents.value.every(
-        (d) => d.status === "已完成" || d.status === "失败",
+        (d) =>
+          d.status === DocStatus.COMPLETED || d.status === DocStatus.FAILED,
       );
       if (allTerminal) {
         stopPolling();
@@ -3766,13 +3828,15 @@ export function useDocumentPolling(kbId: Ref<number>) {
     }
   }
 
-  onBeforeUnmount(() => stopPolling());
+  onBeforeUnmount(() => {
+    stopPolling();
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  });
 
-  // 页面可见性：不可见时跳过轮询，可见时立即刷新一次
   function handleVisibilityChange() {
     isVisible = !document.hidden;
     if (!document.hidden) {
-      fetchDocs(); // 可见立即刷一次
+      fetchDocs();
     }
   }
 
@@ -3794,7 +3858,7 @@ export function useDocumentPolling(kbId: Ref<number>) {
 
 ```vue
 <script setup lang="ts">
-import { ref, h, type Ref } from "vue";
+import { h } from "vue";
 import {
   NDataTable,
   NButton,
@@ -3805,7 +3869,7 @@ import {
 } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
 import { deleteDocumentApi } from "@/api/kb";
-import type { KnowledgeDocument, DocStatus } from "@/types/ai";
+import { DOC_STATUS_LABEL, type KnowledgeDocument, type DocStatus } from "@/types/ai";
 
 interface Props {
   documents: KnowledgeDocument[];
@@ -3829,7 +3893,7 @@ function statusTag(status: DocStatus) {
   return h(
     NTag,
     { type: typeMap[status] || "default" },
-    { default: () => status },
+    { default: () => DOC_STATUS_LABEL[status] ?? status },
   );
 }
 
@@ -3908,7 +3972,7 @@ const columns: DataTableColumns<KnowledgeDocument> = [
 ```vue
 <script setup lang="ts">
 import { ref } from "vue";
-import { NDialog, NUpload, NButton, NSpace, useMessage } from "naive-ui";
+import { NModal, NUpload, NButton, NSpace, useMessage } from "naive-ui";
 import type { UploadFileInfo } from "naive-ui";
 import { uploadDocumentApi } from "@/api/kb";
 
@@ -3970,11 +4034,13 @@ async function handleUpload() {
 </script>
 
 <template>
-  <NDialog
+  <NModal
     :show="show"
+    preset="dialog"
     title="上传文档"
     :closable="true"
     @close="emit('close')"
+    @update:show="(v: boolean) => !v && emit('close')"
   >
     <NUpload
       v-model:file-list="fileList"
@@ -3996,7 +4062,7 @@ async function handleUpload() {
         </NButton>
       </NSpace>
     </template>
-  </NDialog>
+  </NModal>
 </template>
 ```
 
@@ -4022,6 +4088,7 @@ import {
   NButton,
   NSpace,
   NInput,
+  NModal,
   useDialog,
   useMessage,
 } from "naive-ui";
@@ -4156,6 +4223,12 @@ function enterDetail(kb: KnowledgeBase) {
       :on-negative-click="() => (showCreate = false)"
     >
       <NInput v-model:value="kbForm.name" placeholder="知识库名称" />
+      <NInput
+        v-model:value="kbForm.description"
+        type="textarea"
+        placeholder="描述（可选）"
+        style="margin-top: 12px"
+      />
     </NModal>
   </div>
 </template>
@@ -4316,20 +4389,17 @@ import { aiRoutes } from "./ai";
     ...aiRoutes,
 ```
 
-- [ ] **Step 4: Dashboard 入口（在现有 NButton 之前加入口按钮）**
-
-Modify `ai-java-front/src/views/DashboardView.vue`（在 `<NButton type="error"` 之前加入口 NSpace）：
-
-追加 import（已有 NButton/NSpace，只需加 useRouter）：
+- [ ] **Step 4: Dashboard 入口（`DashboardView.vue` 已有 `useRouter`）**
 
 在 `<NDescriptions` 段落之后、`<NButton type="error">` 之前追加：
 
 ```vue
-<NSpace>
-  <NButton @click="router.push('/kb')">知识库管理</NButton>
-  <NButton type="primary" @click="router.push('/chat?kbId=')">AI 问答</NButton>
-</NSpace>
+        <NSpace>
+          <NButton @click="router.push('/kb')">知识库管理</NButton>
+        </NSpace>
 ```
+
+不要放 ` /chat?kbId=` 空入口；问答从知识库详情「开始问答」进入。
 
 - [ ] **Step 5: 前端编译验证**
 
@@ -4354,7 +4424,7 @@ npm run type-check
 
 ```vue
 <script setup lang="ts">
-import { ref, h, onMounted } from "vue";
+import { ref, onMounted } from "vue";
 import {
   NButton,
   NSpace,
@@ -4696,7 +4766,7 @@ defineProps<Props>();
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NCard, NSpace, NButton, NEmpty, NDrawer } from "naive-ui";
+import { NCard, NSpace, NButton, NDrawer } from "naive-ui";
 import SessionList from "@/components/chat/SessionList.vue";
 import MessageList from "@/components/chat/MessageList.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
@@ -4715,8 +4785,9 @@ const messages = ref<ChatMessage[]>([]);
 const citations = ref<Citation[]>([]);
 const showLeft = ref(false);
 const showRight = ref(false);
+const hasError = ref(false);
 
-const { send, abortController, isStreaming, assistantContent } = useChatStream({
+const { send, abort, isStreaming, assistantContent } = useChatStream({
   onMessage: (delta: string) => {
     assistantContent.value += delta;
   },
@@ -4730,7 +4801,6 @@ const { send, abortController, isStreaming, assistantContent } = useChatStream({
     hasError.value = true;
   },
 });
-const hasError = ref(false);
 
 // 加载历史
 async function loadMessages(sid: number) {
@@ -4766,14 +4836,19 @@ async function handleSend(question: string) {
 }
 
 // watch session 变化（路由 query 切换）
-watch(sessionId, (newSid) => {
-  if (newSid) {
-    loadMessages(newSid);
-  }
-});
+watch(
+  sessionId,
+  (newSid) => {
+    if (newSid) {
+      abort();
+      loadMessages(newSid);
+    }
+  },
+  { immediate: true },
+);
 
 onBeforeUnmount(() => {
-  // abort 旧流
+  abort();
 });
 
 function handleSelectSession(session: ChatSession) {
@@ -4925,7 +5000,7 @@ redis-cli FT.INFO ai-java-kb   # num_docs = chunk 数
 # 创建会话
 curl -X POST http://localhost:8120/api/chat/session/create -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"kbId":1}'
 # SSE 流式提问（-N 不缓冲）
-curl -N http://localhost:8120/api/chat/session/1/send -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"question":"xxx"}'
+curl -N -X POST http://localhost:8120/api/chat/session/1/send -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"question":"xxx"}'
 # 查看历史
 curl http://localhost:8120/api/chat/session/1/messages -H "Authorization: Bearer $TOKEN"
 ```
@@ -4934,7 +5009,7 @@ curl http://localhost:8120/api/chat/session/1/messages -H "Authorization: Bearer
 
 ```bash
 # 删文档
-curl -X DELETE http://localhost:8120/api/document/1 -H "Authorization: Bearer $TOKEN"
+curl -X DELETE http://localhost:8120/api/kb/document/1 -H "Authorization: Bearer $TOKEN"
 # 删 KB
 curl -X DELETE http://localhost:8120/api/kb/1 -H "Authorization: Bearer $TOKEN"
 # 检查 audit_log
@@ -4983,14 +5058,14 @@ mysql -uroot -p -e "select request_params from ai_java.audit_log where operation
 ### 2. 占位符扫描
 
 - 无 TODO / "fill in later" / "similar to Task N"
-- RagChatService 中 `ChatResponse.getResult().getOutput().getText()` 路径有验证注释（Spring AI 2.0 API 可能变化，实现时以 IDE 提示为准）
+- RagChatService 中 `ChatResponse.getResult().getOutput().getText()` 已按 Spring AI 2.0.0 javap 确认可用
 - 所有方法签名、类型名称在各任务内一致
 
 ### 3. 类型一致性
 
 - DTO/VO 字段名与 Java entity 一致（id/kbId/docId/chunkIndex/content/score）
 - 前端 types/ai.ts 的字段名与 Java VO 对应（createTime/updateTime 等）
-- DocStatus 枚举前端用中文值（与后端 DB 存储的 String 枚举名一致）
+- DocStatus 后端 DB 存枚举名（`COMPLETED`），前端 `enum DocStatus` 用同名字符串，中文只走 `DOC_STATUS_LABEL`
 - `ChatSession.DEFAULT_TITLE = "新会话"` 与前端 `ChatSession.title` 初始化一致
 
 ### 4. Boot 4.1 依赖兼容（启动实测，已写入 Task 1/3/6/20）
@@ -5011,6 +5086,23 @@ mysql -uroot -p -e "select request_params from ai_java.audit_log where operation
 | `@NotBlank` / `@Valid` 无法解析 | Boot 4 的 `webmvc` 不再传递 `jakarta.validation-api`；注解写在 **ai-agent** | Task 12 Step 0：ai-agent 显式加 `spring-boot-starter-validation`（不能指望 ai-web） |
 | VO `@NoArgsConstructor` / `@AllArgsConstructor` 无法解析 | 示例只 import 了 `@Data` / `@Builder` | 四个 VO 补齐 Lombok import；时间字段对齐 `UserVO` 的 `@JsonFormat` |
 | Task 13 Step 1 `self` 无法解析 | `self` 在 Step 2 才 `@Lazy` 注入 | Step 1 同类调用写 `this`（事务暂不生效）；Step 2 再改为 `self.xxx` |
+
+阶段 6 及之后（Task 15–28）对照 Spring AI 2.0.0 / 现有接口实测修正：
+
+| 现象 | 根因 | 修正 |
+| --- | --- | --- |
+| 找不到 `ObjectMapper` 类型的 Bean | Boot 4 不装配 Jackson 2 `ObjectMapper` | citations 用 Hutool `JSONUtil.toList` / `toJsonStr`，不注入 Bean |
+| `org.springframework.ai.chat.message.Message` 无法解析 | Spring AI 2.0 包名是 **`messages`（复数）** | `org.springframework.ai.chat.messages.{Message,UserMessage,AssistantMessage,SystemMessage}` |
+| `UserMessage.from()` / `AssistantMessage.from()` 不存在 | 2.0.0 只有 `new UserMessage(String)` / `new AssistantMessage(String)` | `getHistory` 用构造器；查询结果先拷 `ArrayList` 再 `Collections.reverse` |
+| `new Prompt(history, List.of(system, user))` 无法编译 | 2.0 只有 `Prompt(List)` / `Prompt(List, ChatOptions)` | system + history + 当前 user 拼成一条 List |
+| citations `ClassCastException` | 摄取 metadata 只有 String 的 kbId/docId，无 score/chunkIndex | `Document.getScore()`；数值用 `String.valueOf` 再 parse |
+| 过采样未截断 | 过滤后未 `subList(0, topK)` | 过滤后再截前 topK |
+| YAML 末尾再写一段 `spring:` | 同级重复 key 覆盖，丢掉 datasource | Task 20 合并进现有文件 |
+| Knife4j 看不到知识库/对话接口 | `packages-to-scan` 只有 `com.ai.aijava.controller` | 改为 `com.ai.aijava` |
+| 前端删文档 404 | `DELETE /document/{id}` | 后端是 `DELETE /kb/document/{id}` |
+| 轮询永不停止 | 前端 DocStatus 用中文，后端返回 `COMPLETED` | 枚举值与后端 name 对齐，中文走 `DOC_STATUS_LABEL` |
+| SSE 丢帧 / 切会话串流 | parser 错误切片；未 abort | 按 `\n\n` 消费完整帧；`abort()` 在 watch/unmount 调用 |
+| `NModal` / `NDialog` 未导入或误用 | KnowledgeBaseView 用了 NModal 未 import；UploadDialog 用了非常规 NDialog 组件 | NModal + `preset="dialog"` |
 
 ### 5. 范围检查
 

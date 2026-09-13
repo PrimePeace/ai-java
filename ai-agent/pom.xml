@@ -65,6 +65,12 @@
             <version>${mybatis-flex.version}</version>
         </dependency>
 
+        <!-- Boot 4：校验注解与 @Valid 不再由 webmvc 传递 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
         <!-- lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

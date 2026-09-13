@@ -13,6 +13,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
+
 /**
  * 审计日志服务
  * 1. 异步监听 AuditLogEvent 并落库（写入失败仅记录错误日志，不影响主业务）
@@ -48,6 +50,7 @@ public class AuditLogService {
                     .errorMessage(event.getErrorMessage())
                     .executionTime(event.getExecutionTime() != null ? event.getExecutionTime().intValue() : null)
                     .methodSignature(event.getMethodSignature())
+                    .createTime(LocalDateTime.now())
                     .build();
             auditLogMapper.insert(auditLog);
         } catch (Exception e) {

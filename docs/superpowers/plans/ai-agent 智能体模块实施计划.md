@@ -1566,6 +1566,7 @@ feat: 文档摄取管道——Tika 解析、TokenTextSplitter 切分、异步摄
 
 **Files:**
 
+- Modify: `ai-agent/pom.xml`（补 `spring-boot-starter-validation`，否则 `@NotBlank` / `@Valid` 无法编译）
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/dto/request/KnowledgeBaseCreateRequest.java`
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/dto/request/KnowledgeBaseUpdateRequest.java`
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/dto/request/ChatSessionCreateRequest.java`
@@ -1576,6 +1577,18 @@ feat: 文档摄取管道——Tika 解析、TokenTextSplitter 切分、异步摄
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/dto/vo/ChatMessageVO.java`
 - Create: `ai-agent/src/main/java/com/ai/aijava/agent/dto/vo/CitationVO.java`
 - 文档同步：设计文档 9.12
+
+- [ ] **Step 0: ai-agent 补 validation（Boot 4 必须显式声明）**
+
+`spring-boot-starter-webmvc` 在 Boot 4 不再传递 `jakarta.validation-api`。本任务 DTO 的 `@NotBlank` / `@NotNull` / `@Size` 以及 Task 14 的 `@Valid` 都在 **ai-agent** 编译，不能指望 ai-web 的 validation starter。在 `ai-agent/pom.xml` 的 webmvc 依赖后追加：
+
+```xml
+<!-- Boot 4：校验注解与 @Valid 不再由 webmvc 传递 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+</dependency>
+```
 
 - [ ] **Step 1: Request DTO ×4**
 
@@ -1668,8 +1681,11 @@ public class ChatSendRequest {
 ```java
 package com.ai.aijava.agent.dto.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -1691,8 +1707,10 @@ public class KnowledgeBaseVO {
     /** 文档数（GROUP BY 实时统计，不冗余字段） */
     private Long docCount;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updateTime;
 }
 ```
@@ -1700,8 +1718,11 @@ public class KnowledgeBaseVO {
 ```java
 package com.ai.aijava.agent.dto.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -1729,8 +1750,10 @@ public class KnowledgeDocumentVO {
 
     private String errorMessage;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updateTime;
 }
 ```
@@ -1738,8 +1761,11 @@ public class KnowledgeDocumentVO {
 ```java
 package com.ai.aijava.agent.dto.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -1761,9 +1787,11 @@ public class ChatSessionVO {
 
     private String title;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 
     /** 最后活跃时间（列表按此倒序） */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updateTime;
 }
 ```
@@ -1771,8 +1799,11 @@ public class ChatSessionVO {
 ```java
 package com.ai.aijava.agent.dto.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -1796,6 +1827,7 @@ public class ChatMessageVO {
     /** 引用列表（仅 assistant 消息，可为 null） */
     private List<CitationVO> citations;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 }
 ```
@@ -1874,7 +1906,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -1996,8 +2027,8 @@ public class KnowledgeBaseService {
                                 .where(DocumentChunk::getDocId).eq(docId))
                 .stream().map(DocumentChunk::getId).toList();
         deleteVectors(chunkIds);
-        // ③ 删 MySQL 记录（单事务）
-        self.deleteDocumentRecordsTransaction(docId);
+        // ③ 删 MySQL 记录（单事务；Step 1 同类自调用事务不生效，Step 2 改为 self.xxx）
+        deleteDocumentRecordsTransaction(docId);
         deleteFileQuietly(doc.getFilePath());
         log.info("文档已删除 docId={} kbId={} chunks={}", docId, doc.getKbId(), chunkIds.size());
     }
@@ -4972,6 +5003,14 @@ mysql -uroot -p -e "select request_params from ai_java.audit_log where operation
 | knife4j `TypeNotPresentException` | 4.2.0 / springdoc 2.x 不认 Boot 4 条件注解 | `com.baizhukui:knife4j-openapi3-boot4-spring-boot-starter:5.7.1`（springdoc 3.0.3） |
 
 解析结果应对齐：`reactor-netty-http 1.3.6`、`netty 4.2.15.Final`、`reactor-core 3.8.6`、`springdoc-openapi-starter-webmvc-ui 3.0.3`。
+
+阶段 5（Task 12–14）按现有模块编译时还需：
+
+| 现象 | 根因 | 修正（仅文档） |
+| --- | --- | --- |
+| `@NotBlank` / `@Valid` 无法解析 | Boot 4 的 `webmvc` 不再传递 `jakarta.validation-api`；注解写在 **ai-agent** | Task 12 Step 0：ai-agent 显式加 `spring-boot-starter-validation`（不能指望 ai-web） |
+| VO `@NoArgsConstructor` / `@AllArgsConstructor` 无法解析 | 示例只 import 了 `@Data` / `@Builder` | 四个 VO 补齐 Lombok import；时间字段对齐 `UserVO` 的 `@JsonFormat` |
+| Task 13 Step 1 `self` 无法解析 | `self` 在 Step 2 才 `@Lazy` 注入 | Step 1 同类调用写 `this`（事务暂不生效）；Step 2 再改为 `self.xxx` |
 
 ### 5. 范围检查
 

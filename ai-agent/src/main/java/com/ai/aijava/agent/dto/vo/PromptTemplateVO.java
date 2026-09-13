@@ -9,13 +9,13 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 知识库视图对象（含文档数实时统计）
+ * 提示词模板视图对象
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class KnowledgeBaseVO {
+public class PromptTemplateVO {
 
     private Long id;
 
@@ -23,11 +23,9 @@ public class KnowledgeBaseVO {
 
     private String description;
 
-    /** 绑定的提示词模板 ID（NULL=默认模板；前端下拉选中值） */
-    private Long promptTemplateId;
+    private String systemTemplate;
 
-    /** 文档数（GROUP BY 实时统计，不冗余字段） */
-    private Long docCount;
+    private String userTemplate;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

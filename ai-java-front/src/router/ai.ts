@@ -15,6 +15,12 @@ export const aiRoutes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, title: "文档管理", menu: "kb" },
   },
   {
+    path: "prompt",
+    name: "prompt-template",
+    component: () => import("@/views/ai/PromptTemplateView.vue"),
+    meta: { requiresAuth: true, title: "提示词模板", menu: "prompt" },
+  },
+  {
     path: "chat",
     name: "chat",
     component: () => import("@/views/ai/ChatView.vue"),

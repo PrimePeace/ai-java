@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import {
   NCard,
@@ -7,6 +7,7 @@ import {
   NSpace,
   NInput,
   NModal,
+  NSelect,
   useDialog,
   useMessage,
 } from "naive-ui";
@@ -14,19 +15,33 @@ import type {
   KnowledgeBase,
   CreateKbRequest,
   UpdateKbRequest,
+  PromptTemplate,
 } from "@/types/ai";
 import { createKbApi, listKbsApi, updateKbApi, deleteKbApi } from "@/api/kb";
+import { listPromptsApi } from "@/api/prompt";
 
 const router = useRouter();
 const message = useMessage();
 const dialog = useDialog();
 
 const kbs = ref<KnowledgeBase[]>([]);
+const templates = ref<PromptTemplate[]>([]);
 const showCreate = ref(false);
 const editingKb = ref<KnowledgeBase | null>(null);
-const kbForm = ref({ name: "", description: "" });
+const kbForm = ref({ name: "", description: "", promptTemplateId: 0 });
 
-onMounted(fetchKbs);
+const isEdit = computed(() => editingKb.value !== null);
+
+// 下拉选项：默认模板（0） + 我的模板
+const templateOptions = computed(() => [
+  { label: "默认模板", value: 0 },
+  ...templates.value.map((t) => ({ label: t.name, value: t.id })),
+]);
+
+onMounted(() => {
+  fetchKbs();
+  fetchTemplates();
+});
 
 async function fetchKbs() {
   try {
@@ -37,15 +52,29 @@ async function fetchKbs() {
   }
 }
 
+async function fetchTemplates() {
+  try {
+    const res = await listPromptsApi();
+    templates.value = res.data;
+  } catch (e: any) {
+    message.error(e.message || "模板加载失败");
+  }
+}
+
 function openCreate() {
   editingKb.value = null;
-  kbForm.value = { name: "", description: "" };
+  kbForm.value = { name: "", description: "", promptTemplateId: 0 };
   showCreate.value = true;
 }
 
 function openEdit(kb: KnowledgeBase) {
   editingKb.value = kb;
-  kbForm.value = { name: kb.name, description: kb.description };
+  kbForm.value = {
+    name: kb.name,
+    description: kb.description,
+    // null=默认模板，下拉统一用 0 表示
+    promptTemplateId: kb.promptTemplateId ?? 0,
+  };
   showCreate.value = true;
 }
 
@@ -60,6 +89,7 @@ async function handleSave() {
         id: editingKb.value.id,
         name: kbForm.value.name,
         description: kbForm.value.description,
+        promptTemplateId: kbForm.value.promptTemplateId,
       };
       await updateKbApi(data);
       message.success("已更新");
@@ -106,7 +136,7 @@ function enterDetail(kb: KnowledgeBase) {
     <NCard title="知识库管理" class="kb-card">
       <template #header-extra>
         <NButton type="primary" size="small" @click="openCreate"
-          >新建知识库</NButton
+        >新建知识库</NButton
         >
       </template>
       <NSpace vertical size="large">
@@ -121,7 +151,7 @@ function enterDetail(kb: KnowledgeBase) {
               <NButton size="small" @click="enterDetail(kb)">进入</NButton>
               <NButton size="small" @click="openEdit(kb)">编辑</NButton>
               <NButton size="small" type="error" @click="handleDelete(kb)"
-                >删除</NButton
+              >删除</NButton
               >
             </NSpace>
           </div>
@@ -132,21 +162,29 @@ function enterDetail(kb: KnowledgeBase) {
       </NSpace>
     </NCard>
     <NModal
-      v-model:show="showCreate"
-      preset="dialog"
-      title="知识库"
-      positive-text="保存"
-      negative-text="取消"
-      :on-positive-click="handleSave"
-      :on-negative-click="() => (showCreate = false)"
+        v-model:show="showCreate"
+        preset="dialog"
+        :title="isEdit ? '编辑知识库' : '新建知识库'"
+        positive-text="保存"
+        negative-text="取消"
+        :on-positive-click="handleSave"
+        :on-negative-click="() => (showCreate = false)"
     >
       <NInput v-model:value="kbForm.name" placeholder="知识库名称" />
       <NInput
-        v-model:value="kbForm.description"
-        type="textarea"
-        placeholder="描述（可选）"
-        style="margin-top: 12px"
+          v-model:value="kbForm.description"
+          type="textarea"
+          placeholder="描述（可选）"
+          style="margin-top: 12px"
       />
+      <template v-if="isEdit">
+        <p class="kb-form-label">提示词模板</p>
+        <NSelect
+            v-model:value="kbForm.promptTemplateId"
+            :options="templateOptions"
+            placeholder="选择提示词模板"
+        />
+      </template>
     </NModal>
   </div>
 </template>
@@ -176,6 +214,12 @@ function enterDetail(kb: KnowledgeBase) {
 .kb-meta {
   font-size: 12px;
   color: #999;
+}
+.kb-form-label {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
 }
 .empty {
   text-align: center;

@@ -49,6 +49,7 @@ CREATE TABLE `knowledge_base` (
     `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '知识库ID',
     `name`        VARCHAR(64)  NOT NULL COMMENT '知识库名称',
     `description` VARCHAR(256) DEFAULT '' COMMENT '知识库描述',
+    `prompt_template_id` BIGINT DEFAULT NULL COMMENT '绑定的提示词模板ID（NULL=默认模板）',
     `user_id`     BIGINT       NOT NULL COMMENT '创建者用户ID',
     `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -109,3 +110,20 @@ CREATE TABLE `chat_message` (
     PRIMARY KEY (`id`),
     INDEX `idx_session_id` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对话消息表';
+
+
+-- ==================== Prompt 工程 ====================
+
+-- 提示词模板表
+CREATE TABLE `prompt_template` (
+   `id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '模板ID',
+   `user_id`         BIGINT       NOT NULL COMMENT '所属用户ID',
+   `name`            VARCHAR(64)  NOT NULL COMMENT '模板名称',
+   `description`     VARCHAR(256) DEFAULT '' COMMENT '模板描述',
+   `system_template` TEXT         NOT NULL COMMENT '系统提示词模板（变量 {kbName} {kbDescription}）',
+   `user_template`   TEXT         NOT NULL COMMENT '用户消息模板（变量 {question} {references} {referencesBlock}）',
+   `create_time`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+   `update_time`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+   PRIMARY KEY (`id`),
+   INDEX `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提示词模板表';

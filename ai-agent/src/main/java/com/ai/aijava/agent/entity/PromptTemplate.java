@@ -11,35 +11,37 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 知识库实体，对应 knowledge_base 表
+ * 提示词模板实体，对应 prompt_template 表
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("Knowledge_Base")
-public class KnowledgeBase {
+@Table("prompt_template")
+public class PromptTemplate {
 
-    /** 知识库 ID（主键，自增） */
+    /** 模板 ID（主键，自增） */
     @Id(keyType = KeyType.Auto)
     private Long id;
 
-    /** 知识库名称 */
+    /** 所属用户 ID */
+    private Long userId;
+
+    /** 模板名称 */
     private String name;
 
-    /** 知识库描述 */
+    /** 模板描述 */
     private String description;
 
-    /** 绑定的提示词模板 ID（NULL=默认模板，弱引用，模板删除时自动解绑） */
-    private Long promptTemplateId;
+    /** 系统提示词模板（变量 {kbName} {kbDescription}） */
+    private String systemTemplate;
 
-    /** 创建者用户 ID */
-    private Long userId;
+    /** 用户消息模板（变量 {question} {references} {referencesBlock}） */
+    private String userTemplate;
 
     /** 创建时间 */
     private LocalDateTime createTime;
 
     /** 更新时间 */
     private LocalDateTime updateTime;
-
 }

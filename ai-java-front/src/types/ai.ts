@@ -17,6 +17,7 @@ export interface KnowledgeBase {
   id: number;
   name: string;
   description: string;
+  promptTemplateId: number | null;
   docCount: number;
   createTime: string;
   updateTime: string;
@@ -60,6 +61,28 @@ export interface Citation {
   score: number;
 }
 
+// 提示词模板
+export interface PromptTemplate {
+  id: number;
+  name: string;
+  description: string;
+  systemTemplate: string;
+  userTemplate: string;
+  createTime: string;
+  updateTime: string;
+}
+
+export interface CreatePromptRequest {
+  name: string;
+  description?: string;
+  systemTemplate: string;
+  userTemplate: string;
+}
+
+export interface UpdatePromptRequest extends CreatePromptRequest {
+  id: number;
+}
+
 // KB 创建/修改/会话创建请求
 export interface CreateKbRequest {
   name: string;
@@ -70,6 +93,8 @@ export interface UpdateKbRequest {
   id: number;
   name: string;
   description?: string;
+  /** null=不修改；0=解绑（默认模板）；>0=绑定该模板 */
+  promptTemplateId?: number | null;
 }
 
 export interface CreateSessionRequest {

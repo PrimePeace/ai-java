@@ -4,6 +4,62 @@
 
 ---
 
+## 0. RAG 全链路流程图（总览）
+
+整个 ai-agent 模块包含两条主链路：**① 文档摄取**（离线入库）和 **② RAG 问答**（在线检索生成）。两条链路通过 Redis 向量库衔接，涉及 4 类存储介质（MySQL / Redis 向量库 / 磁盘文件 / 智谱云端 API）。
+
+```mermaid
+flowchart TB
+    subgraph INGEST["① 文档摄取链路（POST /kb/{kbId}/document/upload，异步执行）"]
+        direction TB
+        A1["校验归属 / 白名单 pdf·docx·md·txt / ≤20MB"] --> A2["存盘<br/>uploads/{kbId}/{uuid}.ext"]
+        A2 --> A3[("MySQL knowledge_document<br/>status=UPLOADED")]
+        A3 --> A4["立即返回 docId<br/>前端轮询 /list 获取进度"]
+        A3 --> A5["@Async ingestWorker<br/>status=PROCESSING"]
+        A5 --> A6["Tika 解析 → 纯文本"]
+        A6 --> A7["TokenTextSplitter 切分<br/>chunkSize=800 / 重叠200"]
+        A7 --> A8[("MySQL document_chunk<br/>拿到自增 chunkId")]
+        A8 --> A9["vectorStore.add()<br/>智谱 embedding-3 → 1024维向量"]
+        A9 --> A10[("Redis 向量库<br/>key = kb:vector:{chunkId}<br/>metadata: kbId + docId")]
+        A10 --> A11["status=COMPLETED"]
+        A6 -. "空文本/异常" .-> A12["status=FAILED<br/>errorMessage ≤ 512字"]
+    end
+
+    subgraph RAG["② RAG 问答链路（POST /chat/session/{id}/send，SSE 流式）"]
+        direction TB
+        B1["会话归属校验 → 拿 kbId"] --> B2{"有 COMPLETED 文档？"}
+        B2 -- "无" --> B3["跳过检索（空库保护）"]
+        B2 -- "有" --> B4["智谱 embedding-3<br/>问题 → 1024维向量"]
+        B4 --> B5["Redis KNN 相似度检索<br/>过采样 topK × 2"]
+        B5 --> B6["过滤 kbId + status=COMPLETED<br/>截取前 topK"]
+        B6 --> B7["构建 citations 引用溯源<br/>chunkId / docId / 原文节选150字 / score"]
+        B3 --> B8["加载历史对话<br/>（剥离末尾孤立 user 消息）"]
+        B7 --> B8
+        B8 --> B9["拼装 Prompt：System + History<br/>+ 参考资料 + Question"]
+        B9 --> B10[("MySQL chat_message<br/>user 落库 + 首问更新会话标题")]
+        B10 --> B11["智谱 glm-5.3-flash<br/>chatModel.stream()"]
+        B11 --> B12["SSE 事件流：message × N<br/>→ citations → end（异常→error）"]
+        B12 --> B13[("MySQL chat_message<br/>assistant 落库（失败仅log不影响流）")]
+    end
+
+    A10 -. "问答时被 KNN 检索" .-> B5
+```
+
+**图例与要点**：
+
+| 图形         | 含义                                                         |
+| ------------ | ------------------------------------------------------------ |
+| 圆柱 `[( )]` | 持久化存储：MySQL（正主，存原文）/ Redis（向量索引，可再生） |
+| 菱形 `{ }`   | 判断分支（空库保护）                                         |
+| 实线箭头     | 主流程                                                       |
+| 虚线箭头     | 异常路径 / 跨链路数据关联                                    |
+
+- 摄取与问答**解耦**：文档不重新上传，问答链路只依赖 Redis 中已生成的向量 + MySQL 中的 chunk 原文（citations 快照）
+- embedding-3（向量化）与 glm-5.3-flash（生成）各司其职，两次调用分属不同链路阶段
+- MySQL 是 source of truth；Redis 向量丢失后可由 MySQL chunk 重新向量化重建（当前未提供自动重建接口）
+
+---
+
 ## 1. ChatController — 对话接口
 
 ### 1.1 接口清单

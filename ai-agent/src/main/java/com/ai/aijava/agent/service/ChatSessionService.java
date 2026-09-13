@@ -18,19 +18,20 @@ import com.ai.aijava.exception.ThrowUtils;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
- * 会话与消息服务
+ * 会话服务：会话 CRUD + 前端全量历史展示
+ * 模型记忆窗口（chat memory）已收编至 DbChatMemory：
+ * getHistory / saveUserMessage / saveAssistantMessage 已删除，
+ * RagChatService 统一走 chatMemory.add/get。
  */
 @Slf4j
 @Service
@@ -40,6 +41,7 @@ public class ChatSessionService {
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageMapper chatMessageMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
+    private final ChatMemory chatMemory;
 
     /**
      * 创建会话（kbId 绑定，title 默认）
@@ -92,7 +94,7 @@ public class ChatSessionService {
         List<KnowledgeBase> kbs = knowledgeBaseMapper.selectListByQuery(
                 QueryWrapper.create().select(KnowledgeBase::getId, KnowledgeBase::getName)
                         .where(KnowledgeBase::getId).in(kbIds));
-        var nameMap = kbs.stream().collect(java.util.stream.Collectors.toMap(KnowledgeBase::getId, KnowledgeBase::getName));
+        var nameMap = kbs.stream().collect(Collectors.toMap(KnowledgeBase::getId, KnowledgeBase::getName));
         return sessions.stream().map(s -> ChatSessionVO.builder()
                 .id(s.getId())
                 .kbId(s.getKbId())
@@ -104,7 +106,8 @@ public class ChatSessionService {
     }
 
     /**
-     * 历史消息（全量，按 id 升序即时间序；含 citations 反序列化）
+     * 历史消息（全量 chat history，前端展示用；按 id 升序即时间序；含 citations 反序列化）
+     * 注意与 DbChatMemory.get（模型记忆窗口）区分：本方法读全量、不做窗口裁剪
      */
     public List<ChatMessageVO> listMessages(Long sessionId) {
         getOwnedSession(sessionId);
@@ -132,42 +135,13 @@ public class ChatSessionService {
     }
 
     /**
-     * 删除会话（级联删消息）
+     * 删除会话（消息清理复用 chatMemory.clear）
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteSession(Long sessionId) {
         getOwnedSession(sessionId);
-        chatMessageMapper.deleteByQuery(QueryWrapper.create()
-                .where(ChatMessage::getSessionId).eq(sessionId));
+        chatMemory.clear(String.valueOf(sessionId));
         chatSessionMapper.deleteById(sessionId);
-    }
-
-    /**
-     * 保存用户提问
-     */
-    public Long saveUserMessage(Long sessionId, String question) {
-        ChatMessage msg = ChatMessage.builder()
-                .sessionId(sessionId)
-                .role(ChatMessage.ROLE_USER)
-                .content(question)
-                .createTime(LocalDateTime.now())
-                .build();
-        chatMessageMapper.insert(msg);
-        return msg.getId();
-    }
-
-    /**
-     * 保存助手回答（含 citations JSON 序列化）
-     */
-    public void saveAssistantMessage(Long sessionId, String answer, String citationsJson) {
-        ChatMessage msg = ChatMessage.builder()
-                .sessionId(sessionId)
-                .role(ChatMessage.ROLE_ASSISTANT)
-                .content(answer)
-                .citations(citationsJson)
-                .createTime(LocalDateTime.now())
-                .build();
-        chatMessageMapper.insert(msg);
     }
 
     /**
@@ -192,34 +166,6 @@ public class ChatSessionService {
         update.setId(sessionId);
         update.setUpdateTime(LocalDateTime.now());
         chatSessionMapper.update(update);
-    }
-
-    /**
-     * 获取历史上下文（最近 N 轮对话），丢弃末尾连续的孤立 user 消息
-     *
-     * 设计 4.2 决策 #6：流失败遗留的无应答 user 不进 history，防止模型看到连续 user 无 assistant
-     */
-    public List<Message> getHistory(Long sessionId, int historyRounds) {
-        int limit = historyRounds * 2;
-        List<ChatMessage> msgs = new ArrayList<>(chatMessageMapper.selectListByQuery(
-                QueryWrapper.create()
-                        .select(ChatMessage::getRole, ChatMessage::getContent)
-                        .where(ChatMessage::getSessionId).eq(sessionId)
-                        .orderBy(ChatMessage::getId, false)
-                        .limit(limit)));
-        if (msgs.isEmpty()) {
-            return List.of();
-        }
-        Collections.reverse(msgs);
-        while (!msgs.isEmpty() && ChatMessage.ROLE_USER.equals(msgs.getLast().getRole())) {
-            msgs.removeLast();
-        }
-        return msgs.stream().<Message>map(m -> {
-            if (ChatMessage.ROLE_USER.equals(m.getRole())) {
-                return new UserMessage(m.getContent());
-            }
-            return new AssistantMessage(m.getContent());
-        }).toList();
     }
 
     /**

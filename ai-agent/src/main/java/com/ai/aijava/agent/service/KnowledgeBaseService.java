@@ -19,6 +19,7 @@ import com.ai.aijava.exception.BusinessException;
 import com.ai.aijava.exception.ErrorCode;
 import com.ai.aijava.exception.ThrowUtils;
 import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.util.UpdateEntity;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
 
 /**
  * 知识库服务：CRUD + 级联删除（设计 3.4：同步删除 + 顺序约束 + 幂等）
+ * + 提示词模板绑定（Prompt 工程模块）
  */
 @Slf4j
 @Service
@@ -45,6 +47,7 @@ public class KnowledgeBaseService {
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageMapper chatMessageMapper;
     private final VectorStore vectorStore;
+    private final PromptTemplateService promptTemplateService;
 
     /** 自注入代理：保证 @Transactional 方法经代理生效 */
     @Resource
@@ -56,17 +59,19 @@ public class KnowledgeBaseService {
                                 DocumentChunkMapper documentChunkMapper,
                                 ChatSessionMapper chatSessionMapper,
                                 ChatMessageMapper chatMessageMapper,
-                                VectorStore vectorStore) {
+                                VectorStore vectorStore,
+                                PromptTemplateService promptTemplateService) {
         this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.knowledgeDocumentMapper = knowledgeDocumentMapper;
         this.documentChunkMapper = documentChunkMapper;
         this.chatSessionMapper = chatSessionMapper;
         this.chatMessageMapper = chatMessageMapper;
         this.vectorStore = vectorStore;
+        this.promptTemplateService = promptTemplateService;
     }
 
     /**
-     * 创建知识库
+     * 创建知识库（promptTemplateId 默认 NULL = 默认模板）
      */
     public KnowledgeBaseVO create(KnowledgeBaseCreateRequest request) {
         // 防御：用户上下文缺失时快速失败，避免 DB 约束异常变成 500
@@ -85,6 +90,7 @@ public class KnowledgeBaseService {
                 .id(kb.getId())
                 .name(kb.getName())
                 .description(kb.getDescription())
+                .promptTemplateId(null)
                 .docCount(0L)
                 .createTime(kb.getCreateTime())
                 .updateTime(kb.getUpdateTime())
@@ -112,6 +118,7 @@ public class KnowledgeBaseService {
                 .id(kb.getId())
                 .name(kb.getName())
                 .description(kb.getDescription())
+                .promptTemplateId(kb.getPromptTemplateId())
                 .docCount(countMap.getOrDefault(kb.getId(), 0L))
                 .createTime(kb.getCreateTime())
                 .updateTime(kb.getUpdateTime())
@@ -119,15 +126,28 @@ public class KnowledgeBaseService {
     }
 
     /**
-     * 修改知识库（名称/描述）
+     * 修改知识库（名称/描述 + 可选模板绑定）
+     * promptTemplateId 语义：null=不修改；0=解绑；>0=绑定（校验归属）
      */
     public void update(KnowledgeBaseUpdateRequest request) {
         KnowledgeBase kb = getOwnedKb(request.getId());
+        // 名称/描述常规更新（ignoreNulls）
         KnowledgeBase update = new KnowledgeBase();
         update.setId(kb.getId());
         update.setName(request.getName());
         update.setDescription(request.getDescription());
         knowledgeBaseMapper.update(update);
+        // 模板绑定单独处理（置空必须走 UpdateEntity）
+        Long templateId = request.getPromptTemplateId();
+        if (templateId != null) {
+            if (templateId > 0) {
+                promptTemplateService.getOwnedTemplate(templateId);
+            }
+            KnowledgeBase bindUpdate = UpdateEntity.of(KnowledgeBase.class);
+            bindUpdate.setId(kb.getId());
+            bindUpdate.setPromptTemplateId(templateId > 0 ? templateId : null);
+            knowledgeBaseMapper.update(bindUpdate);
+        }
     }
 
     /**

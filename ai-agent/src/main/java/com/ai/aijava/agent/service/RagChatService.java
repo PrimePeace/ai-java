@@ -2,17 +2,23 @@ package com.ai.aijava.agent.service;
 
 import com.ai.aijava.agent.config.AgentProperties;
 import com.ai.aijava.agent.dto.vo.CitationVO;
+import com.ai.aijava.agent.entity.KnowledgeBase;
 import com.ai.aijava.agent.entity.KnowledgeDocument;
 import com.ai.aijava.agent.enums.DocStatus;
+import com.ai.aijava.agent.mapper.KnowledgeBaseMapper;
 import com.ai.aijava.agent.mapper.KnowledgeDocumentMapper;
+import com.ai.aijava.agent.memory.DbChatMemory;
 import cn.hutool.json.JSONUtil;
 import com.ai.aijava.exception.BusinessException;
+import com.ai.aijava.exception.ErrorCode;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -30,7 +36,7 @@ import java.util.Map;
 
 /**
  * RAG 流式问答（核心）
- * 检索 → 过滤 → Prompt 拼装 → ChatModel 流式 → SSE 推送
+ * 检索 → 过滤 → Prompt 模板渲染 → ChatMemory 历史窗口 → ChatModel 流式 → SSE 推送
  */
 @Slf4j
 @Service
@@ -40,8 +46,11 @@ public class RagChatService {
     private final VectorStore vectorStore;
     private final ChatModel chatModel;
     private final AgentProperties agentProperties;
+    private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KnowledgeDocumentMapper knowledgeDocumentMapper;
     private final ChatSessionService chatSessionService;
+    private final PromptTemplateService promptTemplateService;
+    private final ChatMemory chatMemory;
 
     /**
      * 会话提问 → SSE Flux（4.2 事件协议）
@@ -58,9 +67,13 @@ public class RagChatService {
     }
 
     private Flux<ServerSentEvent<String>> doChat(Long sessionId, String question) {
-        // 归属校验（取会话 → 取 kbId）
+        // 归属校验（取会话 → 取 kbId → 查 KB 用于模板变量渲染）
         var session = chatSessionService.getOwnedSession(sessionId);
         Long kbId = session.getKbId();
+        KnowledgeBase kb = knowledgeBaseMapper.selectOneById(kbId);
+        if (kb == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "知识库不存在");
+        }
         int topK = agentProperties.getTopK();
         int overSampleK = topK * 2; // 过采样（设计 4.2 决策 #5）
 
@@ -92,21 +105,21 @@ public class RagChatService {
         // 构建 citations（含 docName）
         List<CitationVO> citations = buildCitations(hits);
 
-        // 历史（丢弃末尾孤立 user）
-        List<Message> history = chatSessionService.getHistory(sessionId, agentProperties.getHistoryRounds());
+        // 历史记忆窗口（turn 对齐；此时本轮 user 尚未落库）
+        List<Message> history = chatMemory.get(String.valueOf(sessionId));
 
-        // 拼装 Prompt：system → history → 当前 user（2.0 只有 Prompt(List<Message>) / Prompt(List, ChatOptions)）
+        // Prompt 模板渲染（未绑定 KB 用默认模板，行为与旧硬编码等价）
         String refText = buildReferences(hits);
-        String userText = (refText.isBlank() ? "" : "参考资料：\n" + refText + "\n\n")
-                + "问题：" + question;
+        String systemText = promptTemplateService.renderSystem(kb);
+        String userText = promptTemplateService.renderUser(kb, refText, question);
         List<Message> messages = new ArrayList<>(history.size() + 2);
-        messages.add(new SystemMessage(agentProperties.effectiveSystemPrompt()));
+        messages.add(new SystemMessage(systemText));
         messages.addAll(history);
         messages.add(new UserMessage(userText));
         Prompt prompt = new Prompt(messages);
 
-        // user 消息落库
-        chatSessionService.saveUserMessage(sessionId, question);
+        // user 消息落库（chatMemory.add）
+        chatMemory.add(String.valueOf(sessionId), new UserMessage(question));
         chatSessionService.updateTitleIfNeeded(sessionId, question);
 
         // 流式生成 + 装配 SSE
@@ -150,7 +163,11 @@ public class RagChatService {
                 .doOnComplete(() -> {
                     try {
                         String citationsJson = JSONUtil.toJsonStr(citations);
-                        chatSessionService.saveAssistantMessage(sessionId, aggregated.toString(), citationsJson);
+                        // assistant 落库：citations 通过 metadata 传递（DbChatMemory 取出落列）
+                        chatMemory.add(String.valueOf(sessionId), AssistantMessage.builder()
+                                .content(aggregated.toString())
+                                .properties(Map.of(DbChatMemory.CITATIONS_KEY, citationsJson))
+                                .build());
                         chatSessionService.refreshSessionActiveTime(sessionId);
                     } catch (Exception e) {
                         log.error("保存助手消息失败", e);

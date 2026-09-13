@@ -20,4 +20,9 @@ public class KnowledgeBaseUpdateRequest {
 
     @Size(max = 256, message = "描述最长 256 字符")
     private String description;
+
+    /**
+     * 提示词模板绑定：null=不修改（旧客户端兼容）；0=解绑（默认模板）；>0=绑定该模板
+     */
+    private Long promptTemplateId;
 }

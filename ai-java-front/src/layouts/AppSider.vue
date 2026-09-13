@@ -6,6 +6,7 @@ import type { MenuOption } from "naive-ui";
 import type { Component } from "vue";
 import {
   ChatbubblesOutline,
+  DocumentTextOutline,
   LibraryOutline,
   SparklesOutline,
   SpeedometerOutline,
@@ -22,12 +23,14 @@ function renderIcon(icon: Component) {
 const menuOptions: MenuOption[] = [
   { label: "仪表盘", key: "dashboard", icon: renderIcon(SpeedometerOutline) },
   { label: "知识库", key: "kb", icon: renderIcon(LibraryOutline) },
+  { label: "提示词模板", key: "prompt", icon: renderIcon(DocumentTextOutline) },
   { label: "智能问答", key: "chat", icon: renderIcon(ChatbubblesOutline) },
 ];
 
 const menuRoutes: Record<string, string> = {
   dashboard: "/dashboard",
   kb: "/kb",
+  prompt: "/prompt",
   chat: "/chat",
 };
 
@@ -43,15 +46,15 @@ function handleMenuSelect(key: string) {
 
 <template>
   <NLayoutSider
-    bordered
-    collapse-mode="width"
-    :collapsed="collapsed"
-    :collapsed-width="64"
-    :width="220"
-    :native-scrollbar="false"
-    show-trigger
-    @collapse="collapsed = true"
-    @expand="collapsed = false"
+      bordered
+      collapse-mode="width"
+      :collapsed="collapsed"
+      :collapsed-width="64"
+      :width="220"
+      :native-scrollbar="false"
+      show-trigger
+      @collapse="collapsed = true"
+      @expand="collapsed = false"
   >
     <div class="sider-logo">
       <span class="logo-badge">
@@ -60,17 +63,27 @@ function handleMenuSelect(key: string) {
       <span v-show="!collapsed" class="logo-text">AI 知识库</span>
     </div>
     <NMenu
-      :collapsed="collapsed"
-      :collapsed-width="64"
-      :collapsed-icon-size="20"
-      :options="menuOptions"
-      :value="activeMenu"
-      @update:value="handleMenuSelect"
+        :collapsed="collapsed"
+        :collapsed-width="64"
+        :collapsed-icon-size="20"
+        :options="menuOptions"
+        :value="activeMenu"
+        @update:value="handleMenuSelect"
     />
   </NLayoutSider>
 </template>
 
 <style scoped>
+
+/* 定义在当前组件的作用域内 */
+.sider-logo {
+  /* 或者直接定义在父级 */
+}
+/* 也可以在组件的根元素上定义，如果这个变量只在当前组件用的话 */
+:root {
+  --n-border-color: #eff5f5;
+}
+
 .sider-logo {
   height: var(--header-height);
   display: flex;

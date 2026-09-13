@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+paths:
+
+- .claude/rules/*.md
+- .claude/CLAUDE.md
+
 # ai-java 项目开发指南
 
 Spring Boot 4.1 + Vue 3 + TypeScript + MyBatis-Flex 全栈项目（当前为初始化骨架，业务模块待开发）。
@@ -54,6 +59,7 @@ Spring Boot 4.1 + Vue 3 + TypeScript + MyBatis-Flex 全栈项目（当前为初�
 
 - `rules.md` — 后端分层 / Lombok / MyBatis-Flex / 前端组合式 API 等编码规范
 - `claude-code-defensive.md` — AI 协作防御性规则（禁止测试篡改、过度工程化、配置开关掩盖错误等）
+- `research-before-code.md` — 编码前调研规则（查官网确认语法/版本/兼容性、先规划文件清单再写代码、找不到资料时人工介入）
 - `chinese-language.md` — 默认使用简体中文回复、注释、commit message
 - `date-calc.md` — 日期计算规则（禁止默认月末对齐）
 - `file-size-limit.md` — 文件行数限制（Java 300 / Vue 200 / Go 400）

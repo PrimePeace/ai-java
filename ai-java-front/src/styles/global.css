@@ -1,0 +1,166 @@
+/* ===== 全局基础 ===== */
+:root {
+  /* 主布局顶栏高度（MainLayout 与 ChatView 共用） */
+  --header-height: 60px;
+  /* 品牌色（主题定制走 naive-ui themeOverrides，此变量仅供少量自定义元素） */
+  --brand-primary: #6366f1;
+  --brand-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    v-sans,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 全局滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d7e3;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b8bcd0;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ===== 认证页（登录 / 注册共用布局） ===== */
+.auth-page {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f6fa;
+}
+
+.auth-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+
+.auth-card {
+  width: 400px;
+  max-width: 100%;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 40px 36px 32px;
+  box-shadow:
+    0 10px 40px rgba(99, 102, 241, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.auth-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.auth-subtitle {
+  margin: 0 0 28px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.auth-switch {
+  margin: 24px 0 0;
+  text-align: center;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.auth-switch a {
+  color: var(--brand-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-switch a:hover {
+  text-decoration: underline;
+}
+
+/* 小屏隐藏品牌面板 */
+@media (max-width: 900px) {
+  .auth-brand {
+    display: none;
+  }
+}
+
+/* ===== 智能问答布局（ChatView 全屏内容区） ===== */
+.chat-page {
+  display: flex;
+  height: calc(100vh - var(--header-height));
+}
+
+.chat-sidebar {
+  width: 260px;
+  border-right: 1px solid #eee;
+  display: none;
+}
+
+.chat-main {
+  flex: 1;
+  min-width: 0;
+  padding: 16px;
+}
+
+.chat-citation {
+  width: 280px;
+  border-left: 1px solid #eee;
+  display: none;
+}
+
+.chat-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-card .n-card-header {
+  flex-shrink: 0;
+}
+
+.chat-card .n-card__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.drawer-triggers {
+  display: flex;
+}
+
+@media (min-width: 768px) {
+  .chat-sidebar,
+  .chat-citation {
+    display: block;
+  }
+
+  .drawer-triggers {
+    display: none;
+  }
+}

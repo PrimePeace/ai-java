@@ -17,6 +17,7 @@ import com.ai.aijava.agent.mapper.KnowledgeDocumentMapper;
 import com.ai.aijava.context.UserContext;
 import com.ai.aijava.exception.BusinessException;
 import com.ai.aijava.exception.ErrorCode;
+import com.ai.aijava.exception.ThrowUtils;
 import com.mybatisflex.core.query.QueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -67,10 +69,16 @@ public class KnowledgeBaseService {
      * 创建知识库
      */
     public KnowledgeBaseVO create(KnowledgeBaseCreateRequest request) {
+        // 防御：用户上下文缺失时快速失败，避免 DB 约束异常变成 500
+        Long userId = UserContext.getUserId();
+        ThrowUtils.throwIf(userId == null, ErrorCode.NOT_LOGIN_ERROR, "未登录");
+        LocalDateTime now = LocalDateTime.now();
         KnowledgeBase kb = KnowledgeBase.builder()
                 .name(request.getName())
                 .description(request.getDescription())
-                .userId(UserContext.getUserId())
+                .userId(userId)
+                .createTime(now)
+                .updateTime(now)
                 .build();
         knowledgeBaseMapper.insert(kb);
         return KnowledgeBaseVO.builder()

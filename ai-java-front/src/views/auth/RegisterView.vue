@@ -1,17 +1,10 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  NCard,
-  NForm,
-  NFormItem,
-  NInput,
-  NButton,
-  NSpace,
-  useMessage,
-} from "naive-ui";
+import { NForm, NFormItem, NInput, NButton, useMessage } from "naive-ui";
 import type { FormInst, FormRules } from "naive-ui";
 import { useUserStore } from "@/stores/user";
+import AuthBrandPanel from "@/components/auth/AuthBrandPanel.vue";
 
 const router = useRouter();
 const message = useMessage();
@@ -50,7 +43,7 @@ const rules: FormRules = {
     required: true,
     message: "请再次输入密码",
     trigger: ["input", "blur"],
-    validator: (_rule: any, value: string) => {
+    validator: (_rule: unknown, value: string) => {
       if (value !== formData.value.password) {
         return new Error("两次输入的密码不一致");
       }
@@ -75,8 +68,7 @@ async function handleSubmit() {
     if (errors) return;
     loading.value = true;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { confirmPassword, ...registerData } = formData.value;
+      const { confirmPassword: _confirm, ...registerData } = formData.value;
       await userStore.register(registerData);
       message.success("注册成功，请登录");
       router.push("/login");
@@ -88,85 +80,77 @@ async function handleSubmit() {
     }
   });
 }
-
-function goToLogin() {
-  router.push("/login");
-}
 </script>
 
 <template>
   <div class="auth-page">
-    <NCard title="注册" class="auth-card">
-      <NForm
-        ref="formRef"
-        :model="formData"
-        :rules="rules"
-        label-placement="left"
-        label-width="80"
-      >
-        <NFormItem label="用户名" path="username">
-          <NInput
-            v-model:value="formData.username"
-            placeholder="请输入用户名"
-          />
-        </NFormItem>
-        <NFormItem label="密码" path="password">
-          <NInput
-            v-model:value="formData.password"
-            type="password"
-            placeholder="请输入密码（至少8位）"
-            show-password-on="click"
-          />
-        </NFormItem>
-        <NFormItem label="确认密码" path="confirmPassword">
-          <NInput
-            v-model:value="formData.confirmPassword"
-            type="password"
-            placeholder="请再次输入密码"
-            show-password-on="click"
-          />
-        </NFormItem>
-        <NFormItem label="昵称" path="nickname">
-          <NInput
-            v-model:value="formData.nickname"
-            placeholder="请输入昵称（可选）"
-          />
-        </NFormItem>
-        <NFormItem label="邮箱" path="email">
-          <NInput
-            v-model:value="formData.email"
-            placeholder="请输入邮箱（可选）"
-          />
-        </NFormItem>
-        <NFormItem label="手机号" path="phone">
-          <NInput
-            v-model:value="formData.phone"
-            placeholder="请输入手机号（可选）"
-          />
-        </NFormItem>
-        <NFormItem>
-          <NSpace>
-            <NButton type="primary" :loading="loading" @click="handleSubmit">
-              注册
-            </NButton>
-            <NButton @click="goToLogin"> 返回登录 </NButton>
-          </NSpace>
-        </NFormItem>
-      </NForm>
-    </NCard>
+    <AuthBrandPanel class="auth-brand" />
+    <div class="auth-main">
+      <div class="auth-card">
+        <h2 class="auth-title">创建账号</h2>
+        <p class="auth-subtitle">注册后即可构建专属知识库</p>
+        <NForm
+          ref="formRef"
+          :model="formData"
+          :rules="rules"
+          label-placement="top"
+          size="large"
+        >
+          <NFormItem label="用户名" path="username">
+            <NInput
+              v-model:value="formData.username"
+              placeholder="请输入用户名"
+            />
+          </NFormItem>
+          <NFormItem label="密码" path="password">
+            <NInput
+              v-model:value="formData.password"
+              type="password"
+              placeholder="请输入密码（至少8位）"
+              show-password-on="click"
+            />
+          </NFormItem>
+          <NFormItem label="确认密码" path="confirmPassword">
+            <NInput
+              v-model:value="formData.confirmPassword"
+              type="password"
+              placeholder="请再次输入密码"
+              show-password-on="click"
+            />
+          </NFormItem>
+          <NFormItem label="昵称" path="nickname">
+            <NInput
+              v-model:value="formData.nickname"
+              placeholder="请输入昵称（可选）"
+            />
+          </NFormItem>
+          <NFormItem label="邮箱" path="email">
+            <NInput
+              v-model:value="formData.email"
+              placeholder="请输入邮箱（可选）"
+            />
+          </NFormItem>
+          <NFormItem label="手机号" path="phone">
+            <NInput
+              v-model:value="formData.phone"
+              placeholder="请输入手机号（可选）"
+            />
+          </NFormItem>
+          <NButton
+            type="primary"
+            block
+            size="large"
+            :loading="loading"
+            @click="handleSubmit"
+          >
+            注 册
+          </NButton>
+        </NForm>
+        <p class="auth-switch">
+          已有账号？
+          <RouterLink to="/login">返回登录</RouterLink>
+        </p>
+      </div>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.auth-page {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background-color: #f5f5f5;
-}
-
-.auth-card {
-  width: 400px;
-}
-</style>

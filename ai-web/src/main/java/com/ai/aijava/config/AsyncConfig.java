@@ -10,7 +10,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * 异步任务配置
- * 提供审计日志专属线程池，避免与业务线程互相影响
+ * 审计日志、文档摄取、MVC 异步请求各自独立线程池，避免互相挤占
  */
 @Configuration
 @EnableAsync
@@ -54,5 +54,19 @@ public class AsyncConfig {
         return executor;
     }
 
-
+    /**
+     * Spring MVC 异步请求线程池（SSE 流式问答、Callable/DeferredResult）
+     * 覆盖默认 SimpleAsyncTaskExecutor，避免生产负载下无线程上限
+     */
+    @Bean("mvcTaskExecutor")
+    public ThreadPoolTaskExecutor mvcTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(8);
+        executor.setMaxPoolSize(32);
+        executor.setQueueCapacity(200);
+        executor.setThreadNamePrefix("mvc-async-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
 }

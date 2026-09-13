@@ -1,17 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import {
-  NCard,
-  NForm,
-  NFormItem,
-  NInput,
-  NButton,
-  NSpace,
-  useMessage,
-} from "naive-ui";
+import { NForm, NFormItem, NInput, NButton, useMessage } from "naive-ui";
 import type { FormInst, FormRules } from "naive-ui";
 import { useUserStore } from "@/stores/user";
+import AuthBrandPanel from "@/components/auth/AuthBrandPanel.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -64,61 +57,53 @@ async function handleSubmit() {
     }
   });
 }
-
-function goToRegister() {
-  router.push("/register");
-}
 </script>
 
 <template>
   <div class="auth-page">
-    <NCard title="登录" class="auth-card">
-      <NForm
-        ref="formRef"
-        :model="formData"
-        :rules="rules"
-        label-placement="left"
-        label-width="80"
-      >
-        <NFormItem label="用户名" path="username">
-          <NInput
-            v-model:value="formData.username"
-            placeholder="请输入用户名"
-            @keyup.enter="handleSubmit"
-          />
-        </NFormItem>
-        <NFormItem label="密码" path="password">
-          <NInput
-            v-model:value="formData.password"
-            type="password"
-            placeholder="请输入密码"
-            show-password-on="click"
-            @keyup.enter="handleSubmit"
-          />
-        </NFormItem>
-        <NFormItem>
-          <NSpace>
-            <NButton type="primary" :loading="loading" @click="handleSubmit">
-              登录
-            </NButton>
-            <NButton @click="goToRegister"> 注册账号 </NButton>
-          </NSpace>
-        </NFormItem>
-      </NForm>
-    </NCard>
+    <AuthBrandPanel class="auth-brand" />
+    <div class="auth-main">
+      <div class="auth-card">
+        <h2 class="auth-title">欢迎回来</h2>
+        <p class="auth-subtitle">登录你的账号，继续探索知识</p>
+        <NForm
+          ref="formRef"
+          :model="formData"
+          :rules="rules"
+          label-placement="top"
+          size="large"
+        >
+          <NFormItem label="用户名" path="username">
+            <NInput
+              v-model:value="formData.username"
+              placeholder="请输入用户名"
+              @keyup.enter="handleSubmit"
+            />
+          </NFormItem>
+          <NFormItem label="密码" path="password">
+            <NInput
+              v-model:value="formData.password"
+              type="password"
+              placeholder="请输入密码"
+              show-password-on="click"
+              @keyup.enter="handleSubmit"
+            />
+          </NFormItem>
+          <NButton
+            type="primary"
+            block
+            size="large"
+            :loading="loading"
+            @click="handleSubmit"
+          >
+            登 录
+          </NButton>
+        </NForm>
+        <p class="auth-switch">
+          还没有账号？
+          <RouterLink to="/register">立即注册</RouterLink>
+        </p>
+      </div>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.auth-page {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background-color: #f5f5f5;
-}
-
-.auth-card {
-  width: 400px;
-}
-</style>

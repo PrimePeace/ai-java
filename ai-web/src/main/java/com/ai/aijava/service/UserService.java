@@ -40,6 +40,7 @@ public class UserService {
         String encodedPassword = BCryptUtils.encode(request.getPassword());
 
         // 构建用户实体
+        LocalDateTime now = LocalDateTime.now();
         User user = User.builder()
                 .username(request.getUsername())
                 .password(encodedPassword)
@@ -48,6 +49,8 @@ public class UserService {
                 .phone(request.getPhone() != null ? request.getPhone() : "")
                 .loginFailCount(0)
                 .status(1)
+                .createTime(now)
+                .updateTime(now)
                 .build();
 
         try {

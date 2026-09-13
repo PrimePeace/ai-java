@@ -11,8 +11,10 @@ spring:
       charset: UTF-8
       enabled: true
       force: true
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
 
-  # mysql
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/ai_java
@@ -23,36 +25,67 @@ spring:
     redis:
       host: localhost
       port: 6379
-      # Spring AI Redis VectorStore 只注入 JedisConnectionFactory，不能走 Boot 默认 Lettuce
       client-type: jedis
 
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:sk-placeholder}
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      # chat / embedding 各自一套连接，互不影响
+      chat:
+        api-key: ${AI_CHAT_API_KEY:${AI_API_KEY:4a241b248b0b44639bab2fb5ff8e3335.cna3n4wFfmtMBUk2}}
+        base-url: ${AI_CHAT_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+        options:
+          model: glm-5.3-flash
+      embedding:
+        api-key: ${AI_EMBEDDING_API_KEY:${AI_API_KEY:4a241b248b0b44639bab2fb5ff8e3335.cna3n4wFfmtMBUk2}}
+        base-url: ${AI_EMBEDDING_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+        options:
+          model: embedding-3
+          dimensions: 1024
     vectorstore:
       redis:
-        initialize-schema: false
+        uri: redis://localhost:6379
+        index-name: ai-java-kb
+        prefix: "kb:vector:"
+        initialize-schema: true
+        # kbId/docId 过滤字段由 RedisVectorStoreConfig 登记（Spring AI 2.0.0 自动配置无 metadata-fields）
+    mcp:
+      server:
+        name: ai-java-knowledge
+        version: 1.0.0
+        type: SYNC
+        protocol: STREAMABLE
+        streamable-http:
+          mcp-endpoint: /mcp
+          keep-alive-interval: 30s
 
 jwt:
-  secret: "your-256-bit-secret-key-here-must-be-at-least-32-chars" # >= 256 bit
-  access-token-expiration: 7200 # 2h (秒)
-  refresh-token-expiration: 604800 # 7d (秒)
+  secret: "your-256-bit-secret-key-here-must-be-at-least-32-chars"
+  access-token-expiration: 7200
+  refresh-token-expiration: 604800
 
-# 审计日志（等保三级 >= 6 个月）
 audit:
   log:
-    retention-days: 180 # 审计日志文件保留天数，桥接到 logback AUDIT_FILE 的 maxHistory
+    retention-days: 180
 
-# springdoc-openapi
-# http://localhost:8120/api/doc.html#/home
 springdoc:
   group-configs:
     - group: "default"
       paths-to-match: "/**"
-      packages-to-scan: com.ai.aijava.controller
-# knife4j
+      packages-to-scan: com.ai.aijava
+
 knife4j:
   enable: true
   setting:
     language: zh_cn
+
+agent:
+  upload-dir: ./uploads
+  allowed-types: pdf,docx,md,txt
+  max-file-size: 20MB
+  chunk-size: 800
+  top-k: 5
+  history-rounds: 10
+
+mcp:
+  security:
+    token: ${MCP_TOKEN:}

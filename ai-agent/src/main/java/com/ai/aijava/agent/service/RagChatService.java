@@ -7,7 +7,6 @@ import com.ai.aijava.agent.enums.DocStatus;
 import com.ai.aijava.agent.mapper.KnowledgeDocumentMapper;
 import cn.hutool.json.JSONUtil;
 import com.ai.aijava.exception.BusinessException;
-import com.ai.aijava.exception.ErrorCode;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,19 +47,41 @@ public class RagChatService {
      * 会话提问 → SSE Flux（4.2 事件协议）
      */
     public Flux<ServerSentEvent<String>> chat(Long sessionId, String question) {
+        try {
+            return doChat(sessionId, question);
+        } catch (BusinessException e) {
+            return errorFlux(e.getMessage());
+        } catch (Exception e) {
+            log.error("RAG 问答准备阶段异常", e);
+            return errorFlux("问答失败，请稍后重试");
+        }
+    }
+
+    private Flux<ServerSentEvent<String>> doChat(Long sessionId, String question) {
         // 归属校验（取会话 → 取 kbId）
         var session = chatSessionService.getOwnedSession(sessionId);
         Long kbId = session.getKbId();
         int topK = agentProperties.getTopK();
         int overSampleK = topK * 2; // 过采样（设计 4.2 决策 #5）
 
-        // 检索（过采样）
-        List<Document> rawHits = vectorStore.similaritySearch(
-                SearchRequest.builder()
-                        .query(question)
-                        .topK(overSampleK)
-                        .filterExpression("kbId == '" + kbId + "'")
-                        .build());
+        // 检索（过采样）。无已完成文档时跳过向量库，避免空库触发检索异常
+        long completedCount = knowledgeDocumentMapper.selectCountByQuery(
+                QueryWrapper.create()
+                        .where(KnowledgeDocument::getKbId).eq(kbId)
+                        .and(KnowledgeDocument::getStatus).eq(DocStatus.COMPLETED.name()));
+        List<Document> rawHits = List.of();
+        if (completedCount > 0) {
+            rawHits = vectorStore.similaritySearch(
+                    SearchRequest.builder()
+                            .query(question)
+                            .topK(overSampleK)
+                            .filterExpression("kbId == '" + kbId + "'")
+                            .build());
+            String kbIdTag = String.valueOf(kbId);
+            rawHits = rawHits.stream()
+                    .filter(d -> kbIdTag.equals(String.valueOf(d.getMetadata().get("kbId"))))
+                    .toList();
+        }
 
         // 过滤脏向量（只保留所属文档 status=COMPLETED 的 hits），再截前 topK
         List<Document> hits = filterCompleted(rawHits);
@@ -90,6 +111,14 @@ public class RagChatService {
 
         // 流式生成 + 装配 SSE
         return assembleFlux(chatModel.stream(prompt), sessionId, citations);
+    }
+
+    private Flux<ServerSentEvent<String>> errorFlux(String msg) {
+        String safe = msg == null ? "未知错误" : msg.replaceAll("[\\r\\n]", "");
+        return Flux.just(ServerSentEvent.<String>builder()
+                .event("error")
+                .data(safe)
+                .build());
     }
 
     /**

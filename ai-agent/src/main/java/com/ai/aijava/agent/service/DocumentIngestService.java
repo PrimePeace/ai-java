@@ -10,20 +10,25 @@ import com.ai.aijava.context.UserContext;
 import com.ai.aijava.exception.BusinessException;
 import com.ai.aijava.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
  * 文档上传编排：校验 → 存盘 → 落库(UPLOADED) → 触发异步摄取
  * 异步摄取逻辑在 DocumentIngestWorker（拆分避免 @Async 同类自调用失效）
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DocumentIngestService {
@@ -54,18 +59,11 @@ public class DocumentIngestService {
             throw new BusinessException(ErrorCode.PARAMS_ERROR,
                     "文件超过大小限制 " + agentProperties.getMaxFileSize().toMegabytes() + "MB");
         }
-        // 3. 存盘：uploads/{kbId}/{uuid}.{ext}
-        String filePath;
-        try {
-            Path dir = Paths.get(agentProperties.getUploadDir(), String.valueOf(kbId));
-            Files.createDirectories(dir);
-            Path target = dir.resolve(UUID.randomUUID() + "." + ext.toLowerCase());
-            file.transferTo(target.toFile());
-            filePath = target.toString();
-        } catch (IOException e) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件保存失败");
-        }
+        // 3. 存盘：{uploadDir}/{kbId}/{uuid}.{ext}（必须用绝对路径；transferTo 相对路径会落到 Tomcat 临时目录）
+        Path saved = saveToDisk(kbId, ext.toLowerCase(), file);
+        String filePath = saved.toString();
         // 4. 落库（UPLOADED）；insert 自动提交后触发异步，Worker 必能查到记录
+        LocalDateTime now = LocalDateTime.now();
         KnowledgeDocument doc = KnowledgeDocument.builder()
                 .kbId(kbId)
                 .fileName(file.getOriginalFilename())
@@ -73,10 +71,30 @@ public class DocumentIngestService {
                 .fileSize(file.getSize())
                 .filePath(filePath)
                 .status(DocStatus.UPLOADED.name())
+                .createTime(now)
+                .updateTime(now)
                 .build();
         knowledgeDocumentMapper.insert(doc);
         // 5. 异步摄取
         ingestWorker.ingest(doc.getId());
         return doc.getId();
+    }
+
+    private Path saveToDisk(Long kbId, String ext, MultipartFile file) {
+        Path dir = Paths.get(agentProperties.getUploadDir())
+                .toAbsolutePath()
+                .normalize()
+                .resolve(String.valueOf(kbId));
+        Path target = dir.resolve(UUID.randomUUID() + "." + ext);
+        try {
+            Files.createDirectories(dir);
+            try (InputStream in = file.getInputStream()) {
+                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+            return target;
+        } catch (IOException e) {
+            log.error("文件保存失败 kbId={} target={}", kbId, target, e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件保存失败");
+        }
     }
 }

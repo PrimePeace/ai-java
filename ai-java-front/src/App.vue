@@ -4,11 +4,20 @@ import {
   NMessageProvider,
   NDialogProvider,
   NLoadingBarProvider,
+  NGlobalStyle,
+  zhCN,
+  dateZhCN,
 } from "naive-ui";
+import { themeOverrides } from "@/styles/theme";
 </script>
 
 <template>
-  <NConfigProvider>
+  <NConfigProvider
+    :locale="zhCN"
+    :date-locale="dateZhCN"
+    :theme-overrides="themeOverrides"
+  >
+    <NGlobalStyle />
     <NLoadingBarProvider>
       <NDialogProvider>
         <NMessageProvider>

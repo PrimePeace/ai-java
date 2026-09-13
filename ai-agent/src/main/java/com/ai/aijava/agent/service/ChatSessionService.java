@@ -14,6 +14,7 @@ import com.ai.aijava.agent.mapper.KnowledgeBaseMapper;
 import com.ai.aijava.context.UserContext;
 import com.ai.aijava.exception.BusinessException;
 import com.ai.aijava.exception.ErrorCode;
+import com.ai.aijava.exception.ThrowUtils;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -44,15 +46,21 @@ public class ChatSessionService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatSessionVO create(ChatSessionCreateRequest request) {
+        // 防御：用户上下文缺失时快速失败，避免 DB 约束异常变成 500
+        Long userId = UserContext.getUserId();
+        ThrowUtils.throwIf(userId == null, ErrorCode.NOT_LOGIN_ERROR, "未登录");
         // 归属校验
         KnowledgeBase kb = knowledgeBaseMapper.selectOneById(request.getKbId());
-        if (kb == null || !kb.getUserId().equals(UserContext.getUserId())) {
+        if (kb == null || !kb.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "知识库不存在");
         }
+        LocalDateTime now = LocalDateTime.now();
         ChatSession session = ChatSession.builder()
-                .userId(UserContext.getUserId())
+                .userId(userId)
                 .kbId(request.getKbId())
                 .title(ChatSession.DEFAULT_TITLE)
+                .createTime(now)
+                .updateTime(now)
                 .build();
         chatSessionMapper.insert(session);
         return ChatSessionVO.builder()
@@ -142,6 +150,7 @@ public class ChatSessionService {
                 .sessionId(sessionId)
                 .role(ChatMessage.ROLE_USER)
                 .content(question)
+                .createTime(LocalDateTime.now())
                 .build();
         chatMessageMapper.insert(msg);
         return msg.getId();
@@ -156,6 +165,7 @@ public class ChatSessionService {
                 .role(ChatMessage.ROLE_ASSISTANT)
                 .content(answer)
                 .citations(citationsJson)
+                .createTime(LocalDateTime.now())
                 .build();
         chatMessageMapper.insert(msg);
     }
@@ -180,6 +190,7 @@ public class ChatSessionService {
     public void refreshSessionActiveTime(Long sessionId) {
         ChatSession update = new ChatSession();
         update.setId(sessionId);
+        update.setUpdateTime(LocalDateTime.now());
         chatSessionMapper.update(update);
     }
 

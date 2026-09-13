@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -56,12 +57,14 @@ public class DocumentIngestWorker {
             List<String> contents = chunkSplitter.split(text);
             // 3. chunk 批量入库（向量 Document id = chunk 自增 id）
             List<Document> vectorDocs = new ArrayList<>(contents.size());
+            LocalDateTime now = LocalDateTime.now();
             for (int i = 0; i < contents.size(); i++) {
                 DocumentChunk chunk = DocumentChunk.builder()
                         .docId(doc.getId())
                         .kbId(doc.getKbId())
                         .chunkIndex(i)
                         .content(contents.get(i))
+                        .createTime(now)
                         .build();
                 documentChunkMapper.insert(chunk);
                 vectorDocs.add(new Document(String.valueOf(chunk.getId()), contents.get(i),

@@ -39,5 +39,6 @@ build/
 /.claude
 /logs/
 /ai-web/logs/
+/uploads/
 
 

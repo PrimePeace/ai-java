@@ -67,12 +67,6 @@ audit:
   log:
     retention-days: 180
 
-springdoc:
-  group-configs:
-    - group: "default"
-      paths-to-match: "/**"
-      packages-to-scan: com.ai.aijava
-
 knife4j:
   enable: true
   setting:

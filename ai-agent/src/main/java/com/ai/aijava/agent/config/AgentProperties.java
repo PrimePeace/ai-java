@@ -48,16 +48,10 @@ public class AgentProperties {
         /** 每个 chunk 默认生成的 Q&A 对数量 */
         private int qaPerChunk = 3;
 
-        /** 智谱微调 API Key（资源包专用 Key，见 agent.fine-tune.api-key） */
-        private String apiKey = "";
+        /** 风格蒸馏采样条数上限（从知识库 chunk 抽取的风格样本数） */
+        private int styleSampleLimit = 20;
 
-        /** 智谱 API 基础地址（含 /api/paas/v4） */
-        private String baseUrl = "https://open.bigmodel.cn/api/paas/v4";
-
-        /** 默认微调基座模型（与已购 glm-4-flash 资源包对齐） */
-        private String defaultBaseModel = "glm-4-flash";
-
-        /** 微调任务状态轮询间隔（毫秒） */
-        private long pollIntervalMs = 30000;
+        /** 风格提示词最大长度（字符数，超出截断） */
+        private int styleMaxLength = 2000;
     }
 }

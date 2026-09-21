@@ -23,8 +23,8 @@ import java.util.List;
 
 /**
  * RAG 流式问答（核心）
- * 路由：KB.chat_engine=ft/auto 且已绑定微调模型 → 微调模型直调；否则走 RAG 链路
- * RAG 链路：检索（KbRetriever）→ Prompt 模板渲染 → ChatMemory 历史窗口 → ChatModel 流式 → SSE 推送
+ * 所有 KB 始终走 RAG 检索链路；style/auto 引擎且有 stylePrompt 时，在 system 文案末尾叠加风格提示词
+ * RAG 链路：检索（KbRetriever）→ Prompt 模板渲染（+style_prompt 叠加）→ ChatMemory 历史窗口 → ChatModel 流式 → SSE 推送
  */
 @Slf4j
 @Service
@@ -55,7 +55,7 @@ public class RagChatService {
     }
 
     private Flux<ServerSentEvent<String>> doChat(Long sessionId, String question) {
-        // 归属校验（取会话 → 取 kbId → 查 KB 用于模板变量渲染与引擎路由）
+        // 归属校验（取会话 → 取 kbId → 查 KB 用于模板渲染与 style_prompt 叠加判断）
         var session = chatSessionService.getOwnedSession(sessionId);
         Long kbId = session.getKbId();
         KnowledgeBase kb = knowledgeBaseMapper.selectOneById(kbId);
@@ -63,12 +63,7 @@ public class RagChatService {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "知识库不存在");
         }
 
-        // 引擎路由：ft/auto + 已绑定微调模型 → 微调模型直调（不走向量检索）
-        if (FineTuneChatService.shouldUseFineTune(kb)) {
-            return fineTuneChatService.streamChat(sessionId, kb, question);
-        }
-
-        // RAG 链路：检索 → 过滤 → 截断 topK
+        // 所有 KB 始终走 RAG 链路：检索 → 过滤 → 截断 topK
         List<Document> hits = kbRetriever.retrieve(kbId, question);
         List<CitationVO> citations = kbRetriever.buildCitations(hits);
 
@@ -76,8 +71,9 @@ public class RagChatService {
         List<Message> history = chatMemory.get(String.valueOf(sessionId));
 
         // Prompt 模板渲染（未绑定 KB 用默认模板，行为与旧硬编码等价）
+        // system 文案 = 模板渲染结果；style/auto 且有 stylePrompt 时追加 style_prompt
         String refText = kbRetriever.buildReferences(hits);
-        String systemText = promptTemplateService.renderSystem(kb);
+        String systemText = fineTuneChatService.buildSystemText(kb);
         String userText = promptTemplateService.renderUser(kb, refText, question);
         List<Message> messages = new ArrayList<>(history.size() + 2);
         messages.add(new SystemMessage(systemText));

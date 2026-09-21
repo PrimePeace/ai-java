@@ -92,7 +92,7 @@ public class KnowledgeBaseService {
                 .description(kb.getDescription())
                 .promptTemplateId(null)
                 .chatEngine("rag")
-                .ftModelId(null)
+                .stylePrompt(null)
                 .docCount(0L)
                 .createTime(kb.getCreateTime())
                 .updateTime(kb.getUpdateTime())
@@ -122,7 +122,7 @@ public class KnowledgeBaseService {
                 .description(kb.getDescription())
                 .promptTemplateId(kb.getPromptTemplateId())
                 .chatEngine(kb.getChatEngine())
-                .ftModelId(kb.getFtModelId())
+                .stylePrompt(kb.getStylePrompt())
                 .docCount(countMap.getOrDefault(kb.getId(), 0L))
                 .createTime(kb.getCreateTime())
                 .updateTime(kb.getUpdateTime())
@@ -130,10 +130,10 @@ public class KnowledgeBaseService {
     }
 
     /**
-     * 修改知识库（名称/描述 + 可选模板绑定 + 可选问答引擎/微调模型绑定）
+     * 修改知识库（名称/描述 + 可选模板绑定 + 可选问答引擎/风格提示词）
      * promptTemplateId 语义：null=不修改；0=解绑；>0=绑定（校验归属）
-     * chatEngine 语义：null=不修改；rag/ft/auto（DTO 已白名单校验）
-     * ftModelId 语义：null=不修改；空串=解绑；非空=绑定
+     * chatEngine 语义：null=不修改；rag/style/auto（DTO 已白名单校验）
+     * stylePrompt 语义：null=不修改；空串=清除；非空=设置
      */
     public void update(KnowledgeBaseUpdateRequest request) {
         KnowledgeBase kb = getOwnedKb(request.getId());
@@ -154,16 +154,16 @@ public class KnowledgeBaseService {
             bindUpdate.setPromptTemplateId(templateId > 0 ? templateId : null);
             knowledgeBaseMapper.update(bindUpdate);
         }
-        // 问答引擎 + 微调模型绑定（解绑置空必须走 UpdateEntity）
-        if (request.getChatEngine() != null || request.getFtModelId() != null) {
+        // 问答引擎 + 风格提示词（清除置空必须走 UpdateEntity）
+        if (request.getChatEngine() != null || request.getStylePrompt() != null) {
             KnowledgeBase engineUpdate = UpdateEntity.of(KnowledgeBase.class);
             engineUpdate.setId(kb.getId());
             if (request.getChatEngine() != null) {
                 engineUpdate.setChatEngine(request.getChatEngine());
             }
-            if (request.getFtModelId() != null) {
-                String ftModelId = request.getFtModelId().isBlank() ? null : request.getFtModelId();
-                engineUpdate.setFtModelId(ftModelId);
+            if (request.getStylePrompt() != null) {
+                String stylePrompt = request.getStylePrompt().isBlank() ? null : request.getStylePrompt();
+                engineUpdate.setStylePrompt(stylePrompt);
             }
             knowledgeBaseMapper.update(engineUpdate);
         }

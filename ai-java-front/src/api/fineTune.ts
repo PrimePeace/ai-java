@@ -7,7 +7,7 @@ import type {
   FineTuneJob,
 } from "@/types/fineTune";
 
-/** 生成训练集 */
+/** 生成问答对数据集 */
 export function generateDatasetApi(data: {
   kbId: number;
   name: string;
@@ -29,14 +29,11 @@ export function deleteDatasetApi(id: number): Promise<BaseResponse<null>> {
   return request.delete(`/fine-tune/dataset/${id}`);
 }
 
-/** 创建微调任务 */
+/** 创建风格生成任务（从数据集蒸馏回答风格） */
 export function createJobApi(data: {
   datasetId: number;
-  baseModel: string;
-  modelName: string;
-  learningRateMultiplier?: number;
-  epochs?: number;
-  batchSize?: number;
+  /** 参与蒸馏的抽样条数：不传=使用全部样本 */
+  sampleLimit?: number;
 }): Promise<BaseResponse<FineTuneJob>> {
   return request.post("/fine-tune/job/create", data);
 }
@@ -48,12 +45,12 @@ export function listJobsApi(
   return request.get(`/fine-tune/job/list/${datasetId}`);
 }
 
-/** 取消微调任务 */
+/** 取消风格任务 */
 export function cancelJobApi(id: number): Promise<BaseResponse<null>> {
   return request.post(`/fine-tune/job/${id}/cancel`);
 }
 
-/** 删除微调任务 */
+/** 删除风格任务 */
 export function deleteJobApi(id: number): Promise<BaseResponse<null>> {
   return request.delete(`/fine-tune/job/${id}`);
 }
@@ -80,10 +77,10 @@ export function listEvaluationsApi(
 export function scoreEvaluationApi(
   id: number,
   ragScore?: number | null,
-  ftScore?: number | null,
+  styleScore?: number | null,
 ): Promise<BaseResponse<null>> {
   return request.post(`/fine-tune/evaluation/score/${id}`, null, {
-    params: { ragScore: ragScore ?? undefined, ftScore: ftScore ?? undefined },
+    params: { ragScore: ragScore ?? undefined, styleScore: styleScore ?? undefined },
   });
 }
 

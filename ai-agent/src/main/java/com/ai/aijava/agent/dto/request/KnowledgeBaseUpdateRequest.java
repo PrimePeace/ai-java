@@ -28,14 +28,15 @@ public class KnowledgeBaseUpdateRequest {
     private Long promptTemplateId;
 
     /**
-     * 问答引擎：null=不修改；rag / ft / auto
+     * 问答引擎：null=不修改；rag / style / auto
+     * rag=纯RAG；style=RAG+风格提示词；auto=有风格提示词则叠加，否则纯RAG
      */
-    @Pattern(regexp = "^(rag|ft|auto)$", message = "问答引擎仅支持 rag/ft/auto")
+    @Pattern(regexp = "^(rag|style|auto)$", message = "问答引擎仅支持 rag/style/auto")
     private String chatEngine;
 
     /**
-     * 微调模型绑定：null=不修改；空字符串=解绑；非空=绑定该微调模型
+     * 风格提示词（风格蒸馏产物）：null=不修改；空字符串=清除；非空=设置
      */
-    @Size(max = 128, message = "微调模型 ID 最长 128 字符")
-    private String ftModelId;
+    @Size(max = 4000, message = "风格提示词最长 4000 字符")
+    private String stylePrompt;
 }

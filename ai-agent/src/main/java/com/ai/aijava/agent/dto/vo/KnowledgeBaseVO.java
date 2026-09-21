@@ -26,11 +26,11 @@ public class KnowledgeBaseVO {
     /** 绑定的提示词模板 ID（NULL=默认模板；前端下拉选中值） */
     private Long promptTemplateId;
 
-    /** 问答引擎：rag / ft / auto */
+    /** 问答引擎：rag / style / auto */
     private String chatEngine;
 
-    /** 绑定的微调模型 ID（NULL=未绑定） */
-    private String ftModelId;
+    /** 风格提示词（风格蒸馏产物，NULL=未生成） */
+    private String stylePrompt;
 
     /** 文档数（GROUP BY 实时统计，不冗余字段） */
     private Long docCount;

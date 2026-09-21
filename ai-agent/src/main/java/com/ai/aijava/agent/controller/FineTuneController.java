@@ -29,9 +29,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 模型微调接口：数据集生成 / 微调任务管理 / 评测对比
+ * 风格蒸馏接口：数据集生成 / 风格任务管理 / 评测对比
+ * （路由前缀保留 /fine-tune 以兼容前端；官方微调已替换为本地风格蒸馏）
  */
-@Tag(name = "模型微调")
+@Tag(name = "风格蒸馏")
 @RestController
 @RequestMapping("/fine-tune")
 @RequiredArgsConstructor
@@ -65,23 +66,23 @@ public class FineTuneController {
         return ResultUtils.success(null);
     }
 
-    // ========== 微调任务 ==========
+    // ========== 风格任务 ==========
 
-    @Operation(summary = "创建微调任务")
+    @Operation(summary = "创建风格任务（从数据集蒸馏风格规范）")
     @RequireLogin
     @PostMapping("/job/create")
     public BaseResponse<FineTuneJobVO> createJob(@RequestBody @Valid CreateFineTuneJobRequest request) {
         return ResultUtils.success(fineTuneJobService.create(request));
     }
 
-    @Operation(summary = "数据集下任务列表")
+    @Operation(summary = "数据集下风格任务列表")
     @RequireLogin
     @GetMapping("/job/list/{datasetId}")
     public BaseResponse<List<FineTuneJobVO>> listJobs(@PathVariable Long datasetId) {
         return ResultUtils.success(fineTuneJobService.listByDataset(datasetId));
     }
 
-    @Operation(summary = "取消微调任务")
+    @Operation(summary = "取消风格任务")
     @RequireLogin
     @PostMapping("/job/{id}/cancel")
     public BaseResponse<Void> cancelJob(@PathVariable Long id) {
@@ -89,7 +90,7 @@ public class FineTuneController {
         return ResultUtils.success(null);
     }
 
-    @Operation(summary = "删除微调任务")
+    @Operation(summary = "删除风格任务")
     @RequireLogin
     @DeleteMapping("/job/{id}")
     public BaseResponse<Void> deleteJob(@PathVariable Long id) {
@@ -122,8 +123,8 @@ public class FineTuneController {
     public BaseResponse<Void> scoreEvaluation(
             @PathVariable Long id,
             @RequestParam(required = false) Integer ragScore,
-            @RequestParam(required = false) Integer ftScore) {
-        evaluationService.score(id, ragScore, ftScore);
+            @RequestParam(required = false) Integer styleScore) {
+        evaluationService.score(id, ragScore, styleScore);
         return ResultUtils.success(null);
     }
 

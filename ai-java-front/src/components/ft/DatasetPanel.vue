@@ -109,8 +109,8 @@ onUnmounted(() => {
 <template>
   <div>
     <div class="panel-bar">
-      <span class="hint">基于知识库切片生成 ChatML 格式训练集（每切片约 {{ form.qaPerChunk }} 个问答对）</span>
-      <NButton type="primary" size="small" @click="showGenerate = true">生成训练集</NButton>
+      <span class="hint">基于知识库切片生成问答对数据集，用于蒸馏回答风格（每切片约 {{ form.qaPerChunk }} 个问答对）</span>
+      <NButton type="primary" size="small" @click="showGenerate = true">生成数据集</NButton>
     </div>
     <p v-if="datasets.length === 0 && !loading" class="empty">暂无数据集</p>
     <NSpace vertical size="small">
@@ -135,7 +135,7 @@ onUnmounted(() => {
     <NModal
         v-model:show="showGenerate"
         preset="dialog"
-        title="生成训练集"
+        title="生成数据集"
         positive-text="开始生成"
         negative-text="取消"
         :loading="generating"

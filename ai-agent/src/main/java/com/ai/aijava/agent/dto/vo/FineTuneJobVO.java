@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 微调任务视图
+ * 风格任务视图（原微调任务视图；官方微调已下线，baseModel/modelName/zhipu* 为历史遗留字段，新任务恒为 null）
  */
 @Data
 @Builder
@@ -21,12 +21,20 @@ public class FineTuneJobVO {
 
     private Long datasetId;
 
+    /** @deprecated 官方微调遗留字段，风格任务恒为 null */
+    @Deprecated
     private String baseModel;
 
+    /** @deprecated 官方微调遗留字段，风格任务恒为 null */
+    @Deprecated
     private String modelName;
 
+    /** @deprecated 官方微调遗留字段，风格任务恒为 null */
+    @Deprecated
     private String zhipuJobId;
 
+    /** @deprecated 官方微调遗留字段，风格任务恒为 null */
+    @Deprecated
     private String zhipuModelId;
 
     private String status;

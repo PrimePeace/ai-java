@@ -20,9 +20,9 @@ export const DATASET_STATUS_LABEL: Record<DatasetStatus, string> = {
 };
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
-  [JobStatus.SUBMITTING]: "提交中",
-  [JobStatus.TRAINING]: "训练中",
-  [JobStatus.SUCCEEDED]: "已成功",
+  [JobStatus.SUBMITTING]: "排队中",
+  [JobStatus.TRAINING]: "生成中",
+  [JobStatus.SUCCEEDED]: "已生成",
   [JobStatus.FAILED]: "失败",
   [JobStatus.CANCELLED]: "已取消",
 };
@@ -40,13 +40,12 @@ export interface FineTuneDataset {
   updateTime: string;
 }
 
+/** 风格生成任务：从数据集蒸馏回答风格提示词 */
 export interface FineTuneJob {
   id: number;
   datasetId: number;
-  baseModel: string;
-  modelName: string;
-  zhipuJobId: string;
-  zhipuModelId: string;
+  /** 蒸馏出的回答风格提示词（成功后写入并绑定到知识库） */
+  stylePrompt: string | null;
   status: JobStatus;
   errorMessage: string | null;
   progress: number;
@@ -58,12 +57,14 @@ export interface EvaluationRecord {
   id: number;
   kbId: number;
   question: string;
+  /** 纯 RAG 链路回答 */
   ragAnswer: string | null;
-  ftAnswer: string | null;
+  /** RAG+风格 链路回答 */
+  styleAnswer: string | null;
   ragScore: number | null;
-  ftScore: number | null;
+  styleScore: number | null;
   autoScoreRag: number | null;
-  autoScoreFt: number | null;
+  autoScoreStyle: number | null;
   evaluatorComment: string | null;
   createTime: string;
   updateTime: string;
@@ -73,18 +74,8 @@ export interface EvaluationSummary {
   total: number;
   scoredCount: number;
   avgRagScore: number;
-  avgFtScore: number;
-  ftWins: number;
+  avgStyleScore: number;
+  styleWins: number;
   ragWins: number;
   ties: number;
 }
-
-/** 智谱可微调基座（与已购资源包对齐：默认 glm-4-flash） */
-export const BASE_MODEL_OPTIONS = [
-  { label: "glm-4-flash（已购资源包 / LoRA·全参）", value: "glm-4-flash" },
-  { label: "glm-4-air-250414", value: "glm-4-air-250414" },
-  { label: "glm-4.5-air", value: "glm-4.5-air" },
-];
-
-/** 创建微调任务时的默认基座 */
-export const DEFAULT_BASE_MODEL = "glm-4-flash";

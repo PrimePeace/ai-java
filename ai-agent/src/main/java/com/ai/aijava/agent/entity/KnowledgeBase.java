@@ -33,11 +33,11 @@ public class KnowledgeBase {
     /** 绑定的提示词模板 ID（NULL=默认模板，弱引用，模板删除时自动解绑） */
     private Long promptTemplateId;
 
-    /** 问答引擎：rag=纯 RAG 链路；ft=纯微调模型；auto=有微调模型走微调，否则回退 RAG */
+    /** 问答引擎：rag=纯 RAG 链路；style=RAG + style_prompt 风格叠加；auto=有 stylePrompt 走 style，否则回退 rag */
     private String chatEngine;
 
-    /** 绑定的微调模型 ID（NULL=未绑定，微调任务成功后自动回填） */
-    private String ftModelId;
+    /** 风格提示词（风格蒸馏产出；style/auto 引擎下叠加到 system 文案末尾） */
+    private String stylePrompt;
 
     /** 创建者用户 ID */
     private Long userId;

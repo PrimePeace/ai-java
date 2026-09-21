@@ -24,7 +24,7 @@ export const aiRoutes: RouteRecordRaw[] = [
     path: "fine-tune",
     name: "fine-tune",
     component: () => import("@/views/ai/FineTuneView.vue"),
-    meta: { requiresAuth: true, title: "模型微调", menu: "fine-tune" },
+    meta: { requiresAuth: true, title: "回答风格", menu: "fine-tune" },
   },
   {
     path: "chat",

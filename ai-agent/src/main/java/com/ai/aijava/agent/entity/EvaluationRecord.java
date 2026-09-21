@@ -29,21 +29,21 @@ public class EvaluationRecord {
 
     private String question;
 
-    /** RAG 链路回答 */
+    /** 纯 RAG 链路回答（不叠加风格提示词） */
     private String ragAnswer;
 
-    /** 微调模型回答 */
-    private String ftAnswer;
+    /** RAG + 风格链路回答（system 叠加 style_prompt） */
+    private String styleAnswer;
 
     /** 人工评分 1-5 */
     private Integer ragScore;
 
-    private Integer ftScore;
+    private Integer styleScore;
 
     /** 自动评测分 0.00-1.00（LLM 裁判） */
     private BigDecimal autoScoreRag;
 
-    private BigDecimal autoScoreFt;
+    private BigDecimal autoScoreStyle;
 
     /** 自动评测评语 */
     private String evaluatorComment;

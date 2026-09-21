@@ -29,7 +29,7 @@ const maxExtractCount = ref(10);
 const running = ref(false);
 
 const hasPending = computed(() =>
-  records.value.some((r) => r.ragAnswer === null || r.ftAnswer === null),
+  records.value.some((r) => r.ragAnswer === null || r.styleAnswer === null),
 );
 
 async function load() {
@@ -66,15 +66,15 @@ async function handleRun() {
   }
 }
 
-async function handleScore(r: EvaluationRecord, field: "rag" | "ft", score: number) {
+async function handleScore(r: EvaluationRecord, field: "rag" | "style", score: number) {
   try {
     await scoreEvaluationApi(
       r.id,
       field === "rag" ? score : r.ragScore,
-      field === "ft" ? score : r.ftScore,
+      field === "style" ? score : r.styleScore,
     );
     if (field === "rag") r.ragScore = score;
-    else r.ftScore = score;
+    else r.styleScore = score;
     message.success("评分已保存");
     const sumRes = await evaluationSummaryApi(props.kbId);
     summary.value = sumRes.data;
@@ -105,7 +105,7 @@ onUnmounted(() => {
       <NInput
           v-model:value="questionsText"
           type="textarea"
-          placeholder="每行一个测试问题；留空则自动从历史对话抽取"
+          placeholder="每行一个测试问题；留空则自动从最新数据集抽取（无数据集则从历史对话抽取）"
           :autosize="{ minRows: 2, maxRows: 5 }"
           style="flex: 1"
       />
@@ -118,8 +118,8 @@ onUnmounted(() => {
     </div>
     <p v-if="summary && summary.total > 0" class="summary">
       共 {{ summary.total }} 条 · 已评分 {{ summary.scoredCount }} 条 ·
-      RAG 均分 {{ summary.avgRagScore }} · 微调均分 {{ summary.avgFtScore }} ·
-      微调胜 {{ summary.ftWins }} / RAG 胜 {{ summary.ragWins }} / 平 {{ summary.ties }}
+      纯 RAG 均分 {{ summary.avgRagScore }} · RAG+风格 均分 {{ summary.avgStyleScore }} ·
+      风格胜 {{ summary.styleWins }} / 纯 RAG 胜 {{ summary.ragWins }} / 平 {{ summary.ties }}
     </p>
     <p v-if="records.length === 0" class="empty">暂无评测记录</p>
     <NCollapse v-else>
@@ -131,7 +131,7 @@ onUnmounted(() => {
       >
         <div class="answers">
           <div class="answer-col">
-            <p class="answer-title">RAG 链路（自动 {{ r.autoScoreRag ?? "-" }}）</p>
+            <p class="answer-title">纯 RAG（自动 {{ r.autoScoreRag ?? "-" }}）</p>
             <p class="answer-text">{{ r.ragAnswer ?? "生成中..." }}</p>
             <NRate
                 :value="r.ragScore ?? 0"
@@ -139,11 +139,11 @@ onUnmounted(() => {
             />
           </div>
           <div class="answer-col">
-            <p class="answer-title">微调模型（自动 {{ r.autoScoreFt ?? "-" }}）</p>
-            <p class="answer-text">{{ r.ftAnswer ?? "生成中..." }}</p>
+            <p class="answer-title">RAG+风格（自动 {{ r.autoScoreStyle ?? "-" }}）</p>
+            <p class="answer-text">{{ r.styleAnswer ?? "生成中..." }}</p>
             <NRate
-                :value="r.ftScore ?? 0"
-                @update:value="(v: number) => handleScore(r, 'ft', v)"
+                :value="r.styleScore ?? 0"
+                @update:value="(v: number) => handleScore(r, 'style', v)"
             />
           </div>
         </div>

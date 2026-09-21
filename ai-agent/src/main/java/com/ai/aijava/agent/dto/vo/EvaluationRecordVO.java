@@ -24,17 +24,19 @@ public class EvaluationRecordVO {
 
     private String question;
 
+    /** 纯 RAG 链路回答（不叠加风格提示词） */
     private String ragAnswer;
 
-    private String ftAnswer;
+    /** RAG + 风格链路回答（system 叠加 style_prompt） */
+    private String styleAnswer;
 
     private Integer ragScore;
 
-    private Integer ftScore;
+    private Integer styleScore;
 
     private BigDecimal autoScoreRag;
 
-    private BigDecimal autoScoreFt;
+    private BigDecimal autoScoreStyle;
 
     private String evaluatorComment;
 

@@ -6,10 +6,13 @@ import com.ai.aijava.agent.dto.vo.EvaluationRecordVO;
 import com.ai.aijava.agent.entity.ChatMessage;
 import com.ai.aijava.agent.entity.ChatSession;
 import com.ai.aijava.agent.entity.EvaluationRecord;
+import com.ai.aijava.agent.entity.FineTuneDataset;
 import com.ai.aijava.agent.entity.KnowledgeBase;
+import com.ai.aijava.agent.enums.DatasetStatus;
 import com.ai.aijava.agent.mapper.ChatMessageMapper;
 import com.ai.aijava.agent.mapper.ChatSessionMapper;
 import com.ai.aijava.agent.mapper.EvaluationRecordMapper;
+import com.ai.aijava.agent.mapper.FineTuneDatasetMapper;
 import com.ai.aijava.agent.util.LlmJsonExtractor;
 import com.ai.aijava.context.UserContext;
 import com.ai.aijava.exception.ErrorCode;
@@ -30,6 +33,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,7 +42,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 评测服务：同一批问题并行走 RAG 链路与微调模型，人工评分为主 + LLM 裁判自动评分辅助
+ * 评测服务：同一批问题并行走「纯 RAG」与「RAG + 风格」两路链路，人工评分为主 + LLM 裁判自动评分辅助
  */
 @Slf4j
 @Service
@@ -47,10 +52,10 @@ public class EvaluationService {
     private final EvaluationRecordMapper evaluationRecordMapper;
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageMapper chatMessageMapper;
+    private final FineTuneDatasetMapper fineTuneDatasetMapper;
     private final KnowledgeBaseService knowledgeBaseService;
     private final KbRetriever kbRetriever;
     private final PromptTemplateService promptTemplateService;
-    private final FineTuneChatService fineTuneChatService;
     private final ChatModel chatModel;
 
     /** 自注入代理：@Async 自调用失效，必须经代理 */
@@ -70,10 +75,14 @@ public class EvaluationService {
                 .filter(q -> q != null && !q.isBlank()).map(String::trim).distinct().toList();
         if (questions.isEmpty()) {
             int maxCount = request.getMaxExtractCount() != null ? request.getMaxExtractCount() : 10;
-            questions = extractQuestionsFromHistory(kb.getId(), maxCount);
+            // 优先从最新 READY 数据集的 JSONL 抽取 user 问题（最贴合 KB 领域），无数据集再回退历史对话
+            questions = extractQuestionsFromDataset(kb.getId(), maxCount);
+            if (questions.isEmpty()) {
+                questions = extractQuestionsFromHistory(kb.getId(), maxCount);
+            }
         }
         ThrowUtils.throwIf(questions.isEmpty(), ErrorCode.PARAMS_ERROR,
-                "没有可评测的问题（请手动输入或先在知识库中产生对话）");
+                "没有可评测的问题（请手动输入，或先生成数据集 / 产生对话）");
 
         LocalDateTime now = LocalDateTime.now();
         List<EvaluationRecord> records = new ArrayList<>(questions.size());
@@ -94,18 +103,18 @@ public class EvaluationService {
     /**
      * 手动评分（人工评分为主，可只评其中一路）
      */
-    public void score(Long recordId, Integer ragScore, Integer ftScore) {
+    public void score(Long recordId, Integer ragScore, Integer styleScore) {
         Long userId = UserContext.getUserId();
         ThrowUtils.throwIf(userId == null, ErrorCode.NOT_LOGIN_ERROR, "未登录");
         validateScore(ragScore);
-        validateScore(ftScore);
+        validateScore(styleScore);
         EvaluationRecord record = evaluationRecordMapper.selectOneById(recordId);
         ThrowUtils.throwIf(record == null, ErrorCode.NOT_FOUND_ERROR, "评测记录不存在");
         knowledgeBaseService.getOwnedKb(record.getKbId());
         EvaluationRecord update = new EvaluationRecord();
         update.setId(recordId);
         update.setRagScore(ragScore);
-        update.setFtScore(ftScore);
+        update.setStyleScore(styleScore);
         evaluationRecordMapper.update(update);
     }
 
@@ -129,41 +138,41 @@ public class EvaluationService {
         List<EvaluationRecord> records = evaluationRecordMapper.selectListByQuery(
                 QueryWrapper.create().where(EvaluationRecord::getKbId).eq(kbId));
         if (records.isEmpty()) {
-            return Map.of("total", 0, "scoredCount", 0, "avgRagScore", 0, "avgFtScore", 0,
-                    "ftWins", 0, "ragWins", 0, "ties", 0);
+            return Map.of("total", 0, "scoredCount", 0, "avgRagScore", 0, "avgStyleScore", 0,
+                    "styleWins", 0, "ragWins", 0, "ties", 0);
         }
         List<EvaluationRecord> scored = records.stream()
-                .filter(r -> r.getRagScore() != null && r.getFtScore() != null).toList();
+                .filter(r -> r.getRagScore() != null && r.getStyleScore() != null).toList();
         double avgRag = scored.stream().mapToInt(EvaluationRecord::getRagScore).average().orElse(0);
-        double avgFt = scored.stream().mapToInt(EvaluationRecord::getFtScore).average().orElse(0);
-        long ftWins = scored.stream().filter(r -> r.getFtScore() > r.getRagScore()).count();
-        long ragWins = scored.stream().filter(r -> r.getRagScore() > r.getFtScore()).count();
+        double avgStyle = scored.stream().mapToInt(EvaluationRecord::getStyleScore).average().orElse(0);
+        long styleWins = scored.stream().filter(r -> r.getStyleScore() > r.getRagScore()).count();
+        long ragWins = scored.stream().filter(r -> r.getRagScore() > r.getStyleScore()).count();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", records.size());
         result.put("scoredCount", scored.size());
         result.put("avgRagScore", Math.round(avgRag * 100.0) / 100.0);
-        result.put("avgFtScore", Math.round(avgFt * 100.0) / 100.0);
-        result.put("ftWins", ftWins);
+        result.put("avgStyleScore", Math.round(avgStyle * 100.0) / 100.0);
+        result.put("styleWins", styleWins);
         result.put("ragWins", ragWins);
-        result.put("ties", scored.size() - ftWins - ragWins);
+        result.put("ties", scored.size() - styleWins - ragWins);
         return result;
     }
 
     /**
-     * 异步执行评测：每条记录分别跑 RAG 链路与微调模型，再 LLM 裁判自动评分
+     * 异步执行评测：每条记录分别跑「纯 RAG」与「RAG + 风格」两路链路，再 LLM 裁判自动评分
      */
     @Async("fineTuneTaskExecutor")
     public void runEvaluationAsync(List<EvaluationRecord> records, KnowledgeBase kb) {
         for (EvaluationRecord record : records) {
             try {
-                String ragAnswer = runRagChain(kb, record.getQuestion());
-                String ftAnswer = fineTuneChatService.callFt(kb, record.getQuestion());
+                String ragAnswer = runRagChain(kb, record.getQuestion(), false);
+                String styleAnswer = runRagChain(kb, record.getQuestion(), true);
                 EvaluationRecord update = new EvaluationRecord();
                 update.setId(record.getId());
                 update.setRagAnswer(truncate(ragAnswer, 6000));
-                update.setFtAnswer(truncate(ftAnswer, 6000));
+                update.setStyleAnswer(truncate(styleAnswer, 6000));
                 evaluationRecordMapper.update(update);
-                autoEvaluate(record.getId(), record.getQuestion(), ragAnswer, ftAnswer);
+                autoEvaluate(record.getId(), record.getQuestion(), ragAnswer, styleAnswer);
             } catch (Exception e) {
                 log.error("评测执行失败 recordId={}", record.getId(), e);
             }
@@ -171,17 +180,68 @@ public class EvaluationService {
     }
 
     /**
-     * RAG 链路评测：检索 → 模板渲染 → 同步调用（复用 KbRetriever，不走 SSE）
+     * RAG 链路评测：检索 → 模板渲染 → 同步调用（复用 KbRetriever / PromptTemplateService，不走 SSE）
+     *
+     * @param withStyle true 时在 system 提示词后叠加 KB 的 style_prompt（RAG + 风格链路）
      */
-    private String runRagChain(KnowledgeBase kb, String question) {
+    private String runRagChain(KnowledgeBase kb, String question, boolean withStyle) {
         List<Document> hits = kbRetriever.retrieve(kb.getId(), question);
         String refText = kbRetriever.buildReferences(hits);
+        String systemText = promptTemplateService.renderSystem(kb);
+        if (withStyle && kb.getStylePrompt() != null && !kb.getStylePrompt().isBlank()) {
+            systemText += "\n\n回答风格要求：\n" + kb.getStylePrompt().trim();
+        }
         List<Message> messages = List.of(
-                new SystemMessage(promptTemplateService.renderSystem(kb)),
+                new SystemMessage(systemText),
                 new UserMessage(promptTemplateService.renderUser(kb, refText, question)));
         ChatResponse response = chatModel.call(new Prompt(messages));
         return response.getResult() != null && response.getResult().getOutput() != null
                 ? response.getResult().getOutput().getText() : "";
+    }
+
+    /**
+     * 从最新 READY 数据集的 ChatML JSONL 中抽取 user 问题（每行 messages 中 role=user 的 content）
+     */
+    private List<String> extractQuestionsFromDataset(Long kbId, int maxCount) {
+        List<FineTuneDataset> datasets = fineTuneDatasetMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .where(FineTuneDataset::getKbId).eq(kbId)
+                        .and(FineTuneDataset::getStatus).eq(DatasetStatus.READY.name())
+                        .orderBy(FineTuneDataset::getCreateTime, false)
+                        .limit(1));
+        if (datasets.isEmpty()) {
+            return List.of();
+        }
+        String filePath = datasets.get(0).getFilePath();
+        if (filePath == null || filePath.isBlank() || !Files.exists(Path.of(filePath))) {
+            return List.of();
+        }
+        try {
+            List<String> questions = new ArrayList<>();
+            for (String line : Files.readAllLines(Path.of(filePath))) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                var messages = JSONUtil.parseObj(line).getJSONArray("messages");
+                for (Object msg : messages) {
+                    var msgObj = JSONUtil.parseObj(msg);
+                    if ("user".equals(msgObj.getStr("role"))) {
+                        String content = msgObj.getStr("content");
+                        if (content != null && !content.isBlank()) {
+                            questions.add(content.trim());
+                        }
+                        break;
+                    }
+                }
+                if (questions.size() >= maxCount) {
+                    break;
+                }
+            }
+            return questions;
+        } catch (Exception e) {
+            log.warn("从数据集抽取评测问题失败 kbId={}", kbId, e);
+            return List.of();
+        }
     }
 
     /**
@@ -216,12 +276,12 @@ public class EvaluationService {
     /**
      * 自动评测：LLM 裁判对比两个回答，输出 0.00-1.00 分数与评语
      */
-    private void autoEvaluate(Long recordId, String question, String ragAnswer, String ftAnswer) {
+    private void autoEvaluate(Long recordId, String question, String ragAnswer, String styleAnswer) {
         String systemText = "你是一个公正的评测裁判。请基于问题，对比两个回答的准确性、完整性和专业性，"
                 + "分别给出 0.00-1.00 的分数，并给出简短评语。仅以 JSON 格式输出：\n"
-                + "{\"ragScore\": 0.85, \"ftScore\": 0.90, \"comment\": \"...\"}";
-        String userText = String.format("问题：%s\n\n回答A（RAG）：%s\n\n回答B（微调）：%s",
-                question, truncate(ragAnswer, 1500), truncate(ftAnswer, 1500));
+                + "{\"ragScore\": 0.85, \"styleScore\": 0.90, \"comment\": \"...\"}";
+        String userText = String.format("问题：%s\n\n回答A（纯RAG）：%s\n\n回答B（RAG+风格）：%s",
+                question, truncate(ragAnswer, 1500), truncate(styleAnswer, 1500));
         try {
             ChatResponse response = chatModel.call(new Prompt(List.of(
                     new SystemMessage(systemText), new UserMessage(userText))));
@@ -231,7 +291,7 @@ public class EvaluationService {
             EvaluationRecord update = new EvaluationRecord();
             update.setId(recordId);
             update.setAutoScoreRag(parseScore(scores.get("ragScore")));
-            update.setAutoScoreFt(parseScore(scores.get("ftScore")));
+            update.setAutoScoreStyle(parseScore(scores.get("styleScore")));
             update.setEvaluatorComment(truncate((String) scores.get("comment"), 500));
             evaluationRecordMapper.update(update);
         } catch (Exception e) {
@@ -266,11 +326,11 @@ public class EvaluationService {
                 .kbId(record.getKbId())
                 .question(record.getQuestion())
                 .ragAnswer(record.getRagAnswer())
-                .ftAnswer(record.getFtAnswer())
+                .styleAnswer(record.getStyleAnswer())
                 .ragScore(record.getRagScore())
-                .ftScore(record.getFtScore())
+                .styleScore(record.getStyleScore())
                 .autoScoreRag(record.getAutoScoreRag())
-                .autoScoreFt(record.getAutoScoreFt())
+                .autoScoreStyle(record.getAutoScoreStyle())
                 .evaluatorComment(record.getEvaluatorComment())
                 .createTime(record.getCreateTime())
                 .updateTime(record.getUpdateTime())

@@ -33,14 +33,15 @@ spring:
       chat:
         api-key: ${AI_CHAT_API_KEY:${AI_API_KEY:4a241b248b0b44639bab2fb5ff8e3335.cna3n4wFfmtMBUk2}}
         base-url: ${AI_CHAT_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
-        options:
-          model: glm-5.3-flash
+        model: glm-5.3-flash
+        extra-body:
+          thinking:
+              type: disabled
       embedding:
         api-key: ${AI_EMBEDDING_API_KEY:${AI_API_KEY:4a241b248b0b44639bab2fb5ff8e3335.cna3n4wFfmtMBUk2}}
         base-url: ${AI_EMBEDDING_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
-        options:
-          model: embedding-3
-          dimensions: 1024
+        model: embedding-3
+        dimensions: 1024
     vectorstore:
       redis:
         uri: redis://localhost:6379
@@ -82,12 +83,9 @@ agent:
   fine-tune:
     upload-dir: ./uploads/fine_tune
     qa-per-chunk: 3
-    # 微调资源包专用 Key（优先 AGENT_FT_API_KEY）；未配置时回退 chat Key
-    # 基座模型固定走 glm-4-flash（与已购微调资源包对齐）
-    api-key: ${AGENT_FT_API_KEY:${AI_CHAT_API_KEY:${AI_API_KEY:c22a98ee66af478dba0d508ebce53cf9.95rjnJkGUhFsawRi}}}
-    base-url: ${AI_CHAT_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
-    default-base-model: glm-4-flash
-    poll-interval-ms: 30000
+    # 风格蒸馏：采样条数上限 / 风格提示词最大长度
+    style-sample-limit: 20
+    style-max-length: 2000
 
 mcp:
   security:

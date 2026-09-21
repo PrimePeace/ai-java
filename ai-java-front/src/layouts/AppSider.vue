@@ -25,7 +25,7 @@ const menuOptions: MenuOption[] = [
   { label: "仪表盘", key: "dashboard", icon: renderIcon(SpeedometerOutline) },
   { label: "知识库", key: "kb", icon: renderIcon(LibraryOutline) },
   { label: "提示词模板", key: "prompt", icon: renderIcon(DocumentTextOutline) },
-  { label: "模型微调", key: "fine-tune", icon: renderIcon(ConstructOutline) },
+  { label: "回答风格", key: "fine-tune", icon: renderIcon(ConstructOutline) },
   { label: "智能问答", key: "chat", icon: renderIcon(ChatbubblesOutline) },
 ];
 

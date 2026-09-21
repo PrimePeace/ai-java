@@ -32,7 +32,7 @@ const kbForm = ref({
   name: "",
   description: "",
   promptTemplateId: 0,
-  chatEngine: "rag" as "rag" | "ft" | "auto",
+  chatEngine: "rag" as "rag" | "style" | "auto",
 });
 
 const isEdit = computed(() => editingKb.value !== null);
@@ -45,10 +45,15 @@ const templateOptions = computed(() => [
 
 // 问答引擎选项
 const engineOptions = [
-  { label: "RAG 检索增强（默认）", value: "rag" },
-  { label: "微调模型（需已绑定模型）", value: "ft" },
-  { label: "自动（有微调模型走微调，否则回退 RAG）", value: "auto" },
+  { label: "纯 RAG 检索增强（默认）", value: "rag" },
+  { label: "风格增强（RAG + 回答风格，需已生成风格）", value: "style" },
+  { label: "自动（有回答风格走风格增强，否则纯 RAG）", value: "auto" },
 ];
+
+/** 风格摘要（编辑弹窗展示用，截断 40 字） */
+function styleSummary(sp: string) {
+  return sp.length > 40 ? sp.slice(0, 40) + "…" : sp;
+}
 
 onMounted(() => {
   fetchKbs();
@@ -91,23 +96,23 @@ function openEdit(kb: KnowledgeBase) {
   showCreate.value = true;
 }
 
-/** 解绑微调模型（ftModelId 置空，引擎回退 rag） */
-async function handleUnbindFtModel() {
+/** 清除回答风格（stylePrompt 置空，引擎回退 rag） */
+async function handleClearStyle() {
   if (!editingKb.value) return;
   try {
     await updateKbApi({
       id: editingKb.value.id,
       name: kbForm.value.name,
       description: kbForm.value.description,
-      ftModelId: "",
+      stylePrompt: "",
       chatEngine: "rag",
     });
-    editingKb.value.ftModelId = null;
+    editingKb.value.stylePrompt = null;
     kbForm.value.chatEngine = "rag";
-    message.success("已解绑微调模型");
+    message.success("已清除回答风格");
     await fetchKbs();
   } catch (e: any) {
-    message.error(e.message || "解绑失败");
+    message.error(e.message || "清除失败");
   }
 }
 
@@ -224,12 +229,12 @@ function enterDetail(kb: KnowledgeBase) {
             :options="engineOptions"
             placeholder="选择问答引擎"
         />
-        <template v-if="editingKb?.ftModelId">
-          <p class="kb-form-label">已绑定微调模型</p>
-          <div class="ft-model-row">
-            <span class="ft-model-id">{{ editingKb.ftModelId }}</span>
-            <NButton size="tiny" tertiary type="error" @click="handleUnbindFtModel">
-              解绑
+        <template v-if="editingKb?.stylePrompt">
+          <p class="kb-form-label">已生成回答风格</p>
+          <div class="style-row">
+            <span class="style-text">{{ styleSummary(editingKb.stylePrompt) }}</span>
+            <NButton size="tiny" tertiary type="error" @click="handleClearStyle">
+              清除
             </NButton>
           </div>
         </template>
@@ -270,13 +275,13 @@ function enterDetail(kb: KnowledgeBase) {
   font-weight: 600;
   color: #334155;
 }
-.ft-model-row {
+.style-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
-.ft-model-id {
+.style-text {
   font-size: 12px;
   color: #64748b;
   word-break: break-all;

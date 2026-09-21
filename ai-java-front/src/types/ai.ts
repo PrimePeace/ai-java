@@ -18,6 +18,10 @@ export interface KnowledgeBase {
   name: string;
   description: string;
   promptTemplateId: number | null;
+  /** 问答引擎：rag=纯 RAG；ft=微调模型；auto=有微调模型走微调否则回退 RAG */
+  chatEngine: "rag" | "ft" | "auto" | null;
+  /** 绑定的微调模型 ID（null=未绑定） */
+  ftModelId: string | null;
   docCount: number;
   createTime: string;
   updateTime: string;
@@ -95,6 +99,10 @@ export interface UpdateKbRequest {
   description?: string;
   /** null=不修改；0=解绑（默认模板）；>0=绑定该模板 */
   promptTemplateId?: number | null;
+  /** 问答引擎：不传=不修改；rag/ft/auto */
+  chatEngine?: "rag" | "ft" | "auto";
+  /** 微调模型：不传=不修改；空串=解绑 */
+  ftModelId?: string;
 }
 
 export interface CreateSessionRequest {

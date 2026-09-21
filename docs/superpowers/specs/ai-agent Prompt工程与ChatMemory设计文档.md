@@ -15,7 +15,7 @@
 | 2   | Prompt 工程 = 模板 CRUD + 内置变量 + KB 绑定 | 不做版本管理 / 调试试运行 / 自定义变量（MVP 边界外）                                                                                                                                        |
 | 3   | 前端包含在本次 MVP                           | 新增模板管理页 + KB 编辑弹窗绑定下拉                                                                                                                                                        |
 | 4   | 向后兼容                                     | 未绑定模板的 KB 渲染结果与现有硬编码行为 100% 等价                                                                                                                                          |
-| 5   | 渲染引擎自研字面替换                         | 不用 Spring AI `PromptTemplate`（ST 引擎的 `{}` 语法与模板中字面 JSON 大括号冲突），用 `String.replace` 白名单替换；**按 key 长度降序**，避免 `{references}` 误伤 `{referencesBlock}`       |
+| 5   | 渲染引擎自研字面替换                         | 不用 Spring AI `PromptTemplate`（ST 引擎的 `{}` 语法与模板中字面 JSON 大括号冲突），用 `String.replace` 白名单替换                                                                          |
 
 ### 0.2 关键技术验证结论（已从本地 jar 反编译查证，Spring AI 2.0.0 / MyBatis-Flex 1.10.3）
 
@@ -30,7 +30,7 @@
 | 7   | `ErrorCode.PARAMS_ERROR`       | 存在（40000），用于未知变量校验报错                                                                                                                                        |
 | 8   | 前端                           | naive-ui；侧边栏菜单硬编码在 `AppSider.vue`；AI 路由集中在 `router/ai.ts`；已有组件按域分子目录（`components/kb/`、`components/chat/`）                                    |
 | 9   | Mapper 扫描                    | `MyBatisFlexConfig` 已 `@MapperScan("com.ai.aijava.agent.mapper")`，新增 Mapper 仍须加 `@Mapper` 与现有 5 个 Mapper 保持一致                                               |
-| 10  | 官方 ChatMemory vs History     | Spring AI 2.0 文档明确：`ChatMemory` 管模型上下文窗口，完整会话记录应另存；方案 C 用同一张 `chat_message` 表、两条读路径，符合该理念                                         |
+| 10  | 官方 ChatMemory vs History     | Spring AI 2.0 文档明确：`ChatMemory` 管模型上下文窗口，完整会话记录应另存；方案 C 用同一张 `chat_message` 表、两条读路径，符合该理念                                       |
 
 ### 0.3 下一步（新会话从这里继续）
 
@@ -43,17 +43,11 @@
 
 对照现有 ai-agent 源码、`docs/sql/ai_java.sql`、Spring AI 2.0 ChatMemory 官方文档后，已修正下列问题（第 8 章代码以本节为准）：
 
-| 级别     | 问题                                                                                         | 修订                                                                 |
-| -------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Critical | `{references}` 是 `{referencesBlock}` 的前缀，`String.replace` 若先替换短 key 会截断长变量     | `render()` 按 key 长度**降序**替换                                   |
-| Critical | `ai_java.sql` 若既改 CREATE 又在末尾 ALTER 同列，新库整文件重放会失败                         | CREATE 含新列；ALTER **只在存量库手工执行**，禁止写入 `ai_java.sql` |
-| Critical | `PromptTemplateMapper` 缺少 `@Mapper`，与现有 Mapper 不一致                                   | 补 `@Mapper`                                                         |
-| Important | `KnowledgeBaseView.vue` 整文件替换后约 230 行，超过 Vue 200 行限制                          | 抽出 `components/kb/KbFormModal.vue`，列表页只保留卡片与删除         |
-| Important | 编辑弹窗放在 `src/components/PromptEditModal.vue`，与现有 `components/{domain}/` 不一致     | 改为 `src/components/prompt/PromptEditModal.vue`                     |
-| Important | `KnowledgeBaseService.update` 名称更新与绑定更新分两次、无事务                               | `@Transactional` 包裹                                                |
-| Important | 模板删除按 `prompt_template_id` 批量解绑，缺索引                                             | `knowledge_base` 增加 `idx_prompt_template_id`                       |
-| Minor    | 弹窗 `handleSave` 失败时 catch 未 `return false`，NModal 仍会关闭                             | catch 中 `return false`                                              |
-| Minor    | 文档乱码（「无结果空串」「查最近」等处 UTF-8 损坏）                                          | 已修复                                                               |
+| 级别     | 问题                                                                  | 修订                                                                |
+| -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Critical | `ai_java.sql` 若既改 CREATE 又在末尾 ALTER 同列，新库整文件重放会失败 | CREATE 含新列；ALTER **只在存量库手工执行**，禁止写入 `ai_java.sql` |
+| Critical | `PromptTemplateMapper` 缺少 `@Mapper`，与现有 Mapper 不一致           | 补 `@Mapper`                                                        |
+| Minor    | 文档乱码（「无结果空串」「查最近」等处 UTF-8 损坏）                   | 已修复                                                              |
 
 ---
 
@@ -101,11 +95,11 @@
 
 ### 2.2 渲染引擎选型（自研字面替换）
 
-| 选项                                                  | 问题                                                                                                 |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Spring AI `PromptTemplate`（ST 引擎）                 | ST 的 `{expr}` 语法与模板正文中字面 `{`/`}`（如 JSON 输出格式示例）冲突，解析直接报错且无友好转义    |
-| Hutool `StrUtil.format`                               | `{}` 占位符同样有转义负担                                                                            |
-| **`String.replace("{var}", value)` 字面替换（选定）** | 变量是封闭白名单（5 个），无表达式需求；模板正文任意字符安全；渲染是纯替换、永不抛异常。**必须按 key 长度降序替换**：`{references}` 是 `{referencesBlock}` 的前缀，先替换短 key 会把 `{referencesBlock}` 变成 `{<refs值>Block}` |
+| 选项                                                  | 问题                                                                                              |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Spring AI `PromptTemplate`（ST 引擎）                 | ST 的 `{expr}` 语法与模板正文中字面 `{`/`}`（如 JSON 输出格式示例）冲突，解析直接报错且无友好转义 |
+| Hutool `StrUtil.format`                               | `{}` 占位符同样有转义负担                                                                         |
+| **`String.replace("{var}", value)` 字面替换（选定）** | 变量是封闭白名单（5 个），无表达式需求；模板正文任意字符安全；渲染是纯替换、永不抛异常            |
 
 ### 2.3 变量白名单
 
@@ -157,13 +151,11 @@ CREATE TABLE `prompt_template` (
     INDEX `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提示词模板表';
 
--- 新库：改 knowledge_base 建表语句（见 8.1 改动 1），含 prompt_template_id 列 + idx_prompt_template_id
--- 存量库：下面两句只在已运行的库手工执行，禁止写入 ai_java.sql 可执行流
+-- 新库：改 knowledge_base 建表语句（见 8.1 改动 1），含 prompt_template_id 列
+-- 存量库：下面一句只在已运行的库手工执行，禁止写入 ai_java.sql 可执行流
 --   （新库 CREATE 已含该列，整文件重放再 ALTER 会 Duplicate column）
 -- ALTER TABLE `knowledge_base`
 --     ADD COLUMN `prompt_template_id` BIGINT DEFAULT NULL COMMENT '绑定的提示词模板ID（NULL=默认模板）' AFTER `description`;
--- ALTER TABLE `knowledge_base`
---     ADD INDEX `idx_prompt_template_id` (`prompt_template_id`);
 ```
 
 存量库补丁（独立执行，见实施计划 Task 1 Step 3）：
@@ -171,8 +163,6 @@ CREATE TABLE `prompt_template` (
 ```sql
 ALTER TABLE `knowledge_base`
     ADD COLUMN `prompt_template_id` BIGINT DEFAULT NULL COMMENT '绑定的提示词模板ID（NULL=默认模板）' AFTER `description`;
-ALTER TABLE `knowledge_base`
-    ADD INDEX `idx_prompt_template_id` (`prompt_template_id`);
 ```
 
 ### 3.3 关键设计决策
@@ -214,7 +204,7 @@ ai-agent/src/main/java/com/ai/aijava/agent/
     ├── PromptTemplateService.java    [新] CRUD + 渲染 + 变量校验 + 删除时解绑
     ├── RagChatService.java           [改] 模板渲染 + chatMemory 集成
     ├── ChatSessionService.java       [改] 删 getHistory/save*Message（收编进 DbChatMemory）
-    └── KnowledgeBaseService.java     [改] update 支持绑定/解绑（@Transactional）
+    └── KnowledgeBaseService.java     [改] update 支持绑定/解绑
 ```
 
 ### 4.2 PromptTemplateService（渲染核心）
@@ -302,7 +292,7 @@ flowchart TB
 | `> 0`          | 绑定（校验模板归属当前用户后写入）                 |
 | `< 0`          | 非法，抛 `PARAMS_ERROR`                            |
 
-实现上 `update()` 整体 `@Transactional`；绑定字段单独走 `UpdateEntity`（name/description 仍走常规 update）。
+实现上 `update()` 中绑定字段单独走 `UpdateEntity`（name/description 仍走常规 update）。
 
 ---
 
@@ -310,23 +300,21 @@ flowchart TB
 
 ### 6.1 文件清单
 
-| 文件                                     | 类型 | 说明                                                                  |
-| ---------------------------------------- | ---- | --------------------------------------------------------------------- |
-| `src/api/prompt.ts`                      | 新增 | 4 个 API 封装                                                         |
-| `src/views/ai/PromptTemplateView.vue`    | 新增 | 模板列表卡片（≤200 行）                                               |
+| 文件                                        | 类型 | 说明                                                                    |
+| ------------------------------------------- | ---- | ----------------------------------------------------------------------- |
+| `src/api/prompt.ts`                         | 新增 | 4 个 API 封装                                                           |
+| `src/views/ai/PromptTemplateView.vue`       | 新增 | 模板列表卡片（≤200 行）                                                 |
 | `src/components/prompt/PromptEditModal.vue` | 新增 | 新增/编辑弹窗（与 `components/kb/`、`components/chat/` 同样按域分目录） |
-| `src/components/kb/KbFormModal.vue`      | 新增 | KB 新建/编辑弹窗（含模板下拉；抽出后列表页不超 200 行）               |
-| `src/types/ai.ts`                        | 修改 | + PromptTemplate 类型；KnowledgeBase/UpdateKbRequest 加字段           |
-| `src/router/ai.ts`                       | 修改 | + `/prompt` 路由（menu: "prompt"）                                    |
-| `src/layouts/AppSider.vue`               | 修改 | + 菜单项"提示词模板"（DocumentTextOutline 图标）                      |
-| `src/views/ai/KnowledgeBaseView.vue`     | 修改 | 列表 + 删除；弹窗委托 `KbFormModal`                                   |
+| `src/types/ai.ts`                           | 修改 | + PromptTemplate 类型；KnowledgeBase/UpdateKbRequest 加字段             |
+| `src/router/ai.ts`                          | 修改 | + `/prompt` 路由（menu: "prompt"）                                      |
+| `src/layouts/AppSider.vue`                  | 修改 | + 菜单项"提示词模板"（DocumentTextOutline 图标）                        |
+| `src/views/ai/KnowledgeBaseView.vue`        | 修改 | 列表 + 删除 + 内联表单弹窗（含模板下拉；未抽出 KbFormModal）            |
 
 ### 6.2 关键交互
 
 - **模板编辑器**：system/user 两个 textarea，Modal 内固定展示变量说明文案（可用变量 + `{referencesBlock}` 空结果行为提示）
 - **KB 绑定**：仅编辑弹窗显示下拉，选项 = `默认模板（value=0）` + 我的模板列表（value=id）；保存时随 `updateKbApi` 提交 `promptTemplateId`（前端 `?? 0` 回显，提交原样传 0，由后端三态消化）
 - **创建 KB**：不显示模板下拉（建库后默认 NULL = 默认模板，编辑时再绑）
-- **弹窗失败不关闭**：`handleSave` 的 catch 必须 `return false`，否则 NModal 的 `on-positive-click` 在 Promise resolve 后仍会关闭弹窗
 
 ---
 
@@ -354,10 +342,9 @@ flowchart TB
 ```
 
 ```sql
--- 同一 CREATE TABLE 的索引区，idx_user_id 后追加
+-- 同一 CREATE TABLE 的索引区
     PRIMARY KEY (`id`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_prompt_template_id` (`prompt_template_id`)
+    INDEX `idx_user_id` (`user_id`)
 ```
 
 **改动 2**：文件末尾**只追加** `prompt_template` 建表（不要把 ALTER 写进来）：
@@ -380,13 +367,11 @@ CREATE TABLE `prompt_template` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提示词模板表';
 ```
 
-**改动 3（存量库手工执行，禁止写入 `ai_java.sql`）**：已运行的 MySQL 执行下面两句。新库走改动 1，不要再跑 ALTER。
+**改动 3（存量库手工执行，禁止写入 `ai_java.sql`）**：已运行的 MySQL 执行下面一句。新库走改动 1，不要再跑 ALTER。
 
 ```sql
 ALTER TABLE `knowledge_base`
     ADD COLUMN `prompt_template_id` BIGINT DEFAULT NULL COMMENT '绑定的提示词模板ID（NULL=默认模板）' AFTER `description`;
-ALTER TABLE `knowledge_base`
-    ADD INDEX `idx_prompt_template_id` (`prompt_template_id`);
 ```
 
 ### 8.2 后端新增文件
@@ -889,16 +874,11 @@ public class PromptTemplateService {
     }
 
     /**
-     * 字面替换渲染（String.replace，变量为封闭白名单，永不抛异常）。
-     * 必须按 key 长度降序：{references} 是 {referencesBlock} 的前缀，
-     * 先替换短 key 会把 {referencesBlock} 截成 {<refs值>Block}。
+     * 字面替换渲染（String.replace，变量为封闭白名单，永不抛异常）
      */
     private String render(String template, Map<String, String> vars) {
         String result = template;
-        List<Map.Entry<String, String>> ordered = vars.entrySet().stream()
-                .sorted((a, b) -> Integer.compare(b.getKey().length(), a.getKey().length()))
-                .toList();
-        for (Map.Entry<String, String> entry : ordered) {
+        for (Map.Entry<String, String> entry : vars.entrySet()) {
             result = result.replace("{" + entry.getKey() + "}", entry.getValue());
         }
         return result;
@@ -1313,9 +1293,8 @@ public class KnowledgeBaseService {
 
     /**
      * 修改知识库（名称/描述 + 可选模板绑定）
-     * promptTemplateId 语义：null=不修改；0=解绑；>0=绑定（校验归属）；<0 非法
+     * promptTemplateId 语义：null=不修改；0=解绑；>0=绑定（校验归属）
      */
-    @Transactional(rollbackFor = Exception.class)
     public void update(KnowledgeBaseUpdateRequest request) {
         KnowledgeBase kb = getOwnedKb(request.getId());
         // 名称/描述常规更新（ignoreNulls）
@@ -1974,7 +1953,7 @@ public class RagChatService {
 
 ### 8.4 前端新增文件
 
->（`src/api/prompt.ts`、`src/components/prompt/PromptEditModal.vue`、`src/views/ai/PromptTemplateView.vue`、`src/components/kb/KbFormModal.vue` 共 4 个）
+> （`src/api/prompt.ts`、`src/components/prompt/PromptEditModal.vue`、`src/views/ai/PromptTemplateView.vue` 共 3 个；`KnowledgeBaseView.vue` 见 8.5 内联表单）
 
 **文件路径：`ai-java-front/src/api/prompt.ts`**
 
@@ -2095,7 +2074,6 @@ async function handleSave() {
     emit("saved");
   } catch (e: any) {
     message.error(e.message || "操作失败");
-    return false;
   }
 }
 </script>
@@ -2280,138 +2258,6 @@ function handleDelete(tpl: PromptTemplate) {
   text-align: center;
   color: #999;
   padding: 40px 0;
-}
-</style>
-```
-
-**文件路径：`ai-java-front/src/components/kb/KbFormModal.vue`**
-
-```vue
-<script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import { NInput, NModal, NSelect, useMessage } from "naive-ui";
-import type {
-  KnowledgeBase,
-  CreateKbRequest,
-  UpdateKbRequest,
-  PromptTemplate,
-} from "@/types/ai";
-import { createKbApi, updateKbApi } from "@/api/kb";
-import { listPromptsApi } from "@/api/prompt";
-
-const props = defineProps<{
-  show: boolean;
-  /** null = 新建；否则为编辑目标 */
-  kb: KnowledgeBase | null;
-}>();
-
-const emit = defineEmits<{
-  (e: "update:show", value: boolean): void;
-  (e: "saved"): void;
-}>();
-
-const message = useMessage();
-const templates = ref<PromptTemplate[]>([]);
-const form = ref({ name: "", description: "", promptTemplateId: 0 });
-const isEdit = computed(() => props.kb !== null);
-
-const templateOptions = computed(() => [
-  { label: "默认模板", value: 0 },
-  ...templates.value.map((t) => ({ label: t.name, value: t.id })),
-]);
-
-watch(
-  () => props.show,
-  (show) => {
-    if (!show) return;
-    if (props.kb) {
-      form.value = {
-        name: props.kb.name,
-        description: props.kb.description || "",
-        promptTemplateId: props.kb.promptTemplateId ?? 0,
-      };
-      fetchTemplates();
-    } else {
-      form.value = { name: "", description: "", promptTemplateId: 0 };
-    }
-  },
-);
-
-async function fetchTemplates() {
-  try {
-    const res = await listPromptsApi();
-    templates.value = res.data ?? [];
-  } catch (e: any) {
-    message.error(e.message || "模板加载失败");
-  }
-}
-
-async function handleSave() {
-  if (!form.value.name.trim()) {
-    message.warning("名称不能为空");
-    return false;
-  }
-  try {
-    if (props.kb) {
-      const data: UpdateKbRequest = {
-        id: props.kb.id,
-        name: form.value.name,
-        description: form.value.description,
-        promptTemplateId: form.value.promptTemplateId,
-      };
-      await updateKbApi(data);
-      message.success("已更新");
-    } else {
-      const data: CreateKbRequest = {
-        name: form.value.name,
-        description: form.value.description,
-      };
-      await createKbApi(data);
-      message.success("已创建");
-    }
-    emit("update:show", false);
-    emit("saved");
-  } catch (e: any) {
-    message.error(e.message || "操作失败");
-    return false;
-  }
-}
-</script>
-
-<template>
-  <NModal
-    :show="show"
-    preset="dialog"
-    :title="isEdit ? '编辑知识库' : '新建知识库'"
-    positive-text="保存"
-    negative-text="取消"
-    :on-positive-click="handleSave"
-    :on-negative-click="() => emit('update:show', false)"
-  >
-    <NInput v-model:value="form.name" placeholder="知识库名称" />
-    <NInput
-      v-model:value="form.description"
-      type="textarea"
-      placeholder="描述（可选）"
-      style="margin-top: 12px"
-    />
-    <template v-if="isEdit">
-      <p class="kb-form-label">提示词模板</p>
-      <NSelect
-        v-model:value="form.promptTemplateId"
-        :options="templateOptions"
-        placeholder="选择提示词模板"
-      />
-    </template>
-  </NModal>
-</template>
-
-<style scoped>
-.kb-form-label {
-  margin: 12px 0 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
 }
 </style>
 ```
@@ -2678,44 +2524,117 @@ function handleMenuSelect(key: string) {
 </style>
 ```
 
-**文件路径：`ai-java-front/src/views/ai/KnowledgeBaseView.vue`**（改动点：弹窗抽到 `KbFormModal`；本文件只保留列表/删除）
+**文件路径：`ai-java-front/src/views/ai/KnowledgeBaseView.vue`**（含内联表单弹窗 + 模板下拉；未抽出 KbFormModal）
 
 ```vue
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { NCard, NButton, NSpace, useDialog, useMessage } from "naive-ui";
-import type { KnowledgeBase } from "@/types/ai";
-import { listKbsApi, deleteKbApi } from "@/api/kb";
-import KbFormModal from "@/components/kb/KbFormModal.vue";
+import {
+  NCard,
+  NButton,
+  NSpace,
+  NInput,
+  NModal,
+  NSelect,
+  useDialog,
+  useMessage,
+} from "naive-ui";
+import type {
+  KnowledgeBase,
+  CreateKbRequest,
+  UpdateKbRequest,
+  PromptTemplate,
+} from "@/types/ai";
+import { createKbApi, listKbsApi, updateKbApi, deleteKbApi } from "@/api/kb";
+import { listPromptsApi } from "@/api/prompt";
 
 const router = useRouter();
 const message = useMessage();
 const dialog = useDialog();
 
 const kbs = ref<KnowledgeBase[]>([]);
-const showForm = ref(false);
+const templates = ref<PromptTemplate[]>([]);
+const showCreate = ref(false);
 const editingKb = ref<KnowledgeBase | null>(null);
+const kbForm = ref({ name: "", description: "", promptTemplateId: 0 });
 
-onMounted(fetchKbs);
+const isEdit = computed(() => editingKb.value !== null);
+
+// 下拉选项：默认模板（0） + 我的模板
+const templateOptions = computed(() => [
+  { label: "默认模板", value: 0 },
+  ...templates.value.map((t) => ({ label: t.name, value: t.id })),
+]);
+
+onMounted(() => {
+  fetchKbs();
+  fetchTemplates();
+});
 
 async function fetchKbs() {
   try {
     const res = await listKbsApi();
-    kbs.value = res.data ?? [];
+    kbs.value = res.data;
   } catch (e: any) {
     message.error(e.message || "加载失败");
   }
 }
 
+async function fetchTemplates() {
+  try {
+    const res = await listPromptsApi();
+    templates.value = res.data;
+  } catch (e: any) {
+    message.error(e.message || "模板加载失败");
+  }
+}
+
 function openCreate() {
   editingKb.value = null;
-  showForm.value = true;
+  kbForm.value = { name: "", description: "", promptTemplateId: 0 };
+  showCreate.value = true;
 }
 
 function openEdit(kb: KnowledgeBase) {
   editingKb.value = kb;
-  showForm.value = true;
+  kbForm.value = {
+    name: kb.name,
+    description: kb.description,
+    // null=默认模板，下拉统一用 0 表示
+    promptTemplateId: kb.promptTemplateId ?? 0,
+  };
+  showCreate.value = true;
+}
+
+async function handleSave() {
+  if (!kbForm.value.name.trim()) {
+    message.warning("名称不能为空");
+    return false;
+  }
+  try {
+    if (editingKb.value) {
+      const data: UpdateKbRequest = {
+        id: editingKb.value.id,
+        name: kbForm.value.name,
+        description: kbForm.value.description,
+        promptTemplateId: kbForm.value.promptTemplateId,
+      };
+      await updateKbApi(data);
+      message.success("已更新");
+    } else {
+      const data: CreateKbRequest = {
+        name: kbForm.value.name,
+        description: kbForm.value.description,
+      };
+      await createKbApi(data);
+      message.success("已创建");
+    }
+    showCreate.value = false;
+    await fetchKbs();
+  } catch (e: any) {
+    message.error(e.message || "操作失败");
+  }
 }
 
 function handleDelete(kb: KnowledgeBase) {
@@ -2767,15 +2686,35 @@ function enterDetail(kb: KnowledgeBase) {
           </div>
         </NCard>
         <p v-if="kbs.length === 0" class="empty">
-          暂无知识库，点击上方「新建知识库」开始
+          暂无知识库，点击上方「新建」开始
         </p>
       </NSpace>
     </NCard>
-    <KbFormModal
-      v-model:show="showForm"
-      :kb="editingKb"
-      @saved="fetchKbs"
-    />
+    <NModal
+      v-model:show="showCreate"
+      preset="dialog"
+      :title="isEdit ? '编辑知识库' : '新建知识库'"
+      positive-text="保存"
+      negative-text="取消"
+      :on-positive-click="handleSave"
+      :on-negative-click="() => (showCreate = false)"
+    >
+      <NInput v-model:value="kbForm.name" placeholder="知识库名称" />
+      <NInput
+        v-model:value="kbForm.description"
+        type="textarea"
+        placeholder="描述（可选）"
+        style="margin-top: 12px"
+      />
+      <template v-if="isEdit">
+        <p class="kb-form-label">提示词模板</p>
+        <NSelect
+          v-model:value="kbForm.promptTemplateId"
+          :options="templateOptions"
+          placeholder="选择提示词模板"
+        />
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -2805,6 +2744,12 @@ function enterDetail(kb: KnowledgeBase) {
   font-size: 12px;
   color: #999;
 }
+.kb-form-label {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
 .empty {
   text-align: center;
   color: #999;
@@ -2826,21 +2771,21 @@ cd ai-java-front && npm run type-check   # 前端类型检查
 
 ### 9.2 功能验收（按序执行）
 
-| #   | 场景                                                    | 预期                                                                |
-| --- | ------------------------------------------------------- | ------------------------------------------------------------------- |
-| 1   | 存量 KB（未绑定模板）提问                               | 回答行为与改造前一致（默认模板渲染结果 = 原硬编码）                 |
-| 2   | 多轮对话（连续追问）                                    | 第 2 轮回答体现第 1 轮上下文（chatMemory.get 生效）                 |
-| 3   | 流式回答完成                                            | chat_message 表新增 assistant 记录且 citations 列有值               |
-| 4   | 创建含未知变量 `{qustion}` 的模板                       | 创建报 40000"含未知变量"                                            |
-| 5   | 创建合法模板 → 编辑 KB 绑定 → 提问                      | 模型按模板 system/user 内容回答（如模板要求开头输出"[TEST]"则可见） |
-| 6   | 模板 user_template 用 `{referencesBlock}`，空知识库提问 | 渲染结果无"参考资料："残留前缀                                      |
-| 7   | 删除已绑定的模板 → 提问                                 | KB 自动回退默认模板，问答正常                                       |
-| 8   | 解绑（下拉选"默认模板"）→ 提问                          | 回到默认模板行为                                                    |
-| 9   | 删除会话                                                | chat_message 该 session 记录清空（chatMemory.clear）                |
-| 10  | 绑定他人模板 id（手工构造请求）                         | 40400"模板不存在"（归属校验）                                       |
-| 11  | 前端：模板 CRUD + KB 绑定下拉                           | 全流程可操作，选中值正确回显                                        |
-| 12  | Knife4j（`/api/doc.html`）                              | /prompt 4 个接口文档正常展示                                        |
-| 13  | 同一 user_template 同时含 `{references}` 与 `{referencesBlock}` | 两者均正确展开，无 `{xxxBlock}` 残留                               |
+| #   | 场景                                                            | 预期                                                                                  |
+| --- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 1   | 存量 KB（未绑定模板）提问                                       | 回答行为与改造前一致（默认模板渲染结果 = 原硬编码）                                   |
+| 2   | 多轮对话（连续追问）                                            | 第 2 轮回答体现第 1 轮上下文（chatMemory.get 生效）                                   |
+| 3   | 流式回答完成                                                    | chat_message 表新增 assistant 记录且 citations 列有值                                 |
+| 4   | 创建含未知变量 `{qustion}` 的模板                               | 创建报 40000"含未知变量"                                                              |
+| 5   | 创建合法模板 → 编辑 KB 绑定 → 提问                              | 模型按模板 system/user 内容回答（如模板要求开头输出"[TEST]"则可见）                   |
+| 6   | 模板 user_template 用 `{referencesBlock}`，空知识库提问         | 渲染结果无"参考资料："残留前缀                                                        |
+| 7   | 删除已绑定的模板 → 提问                                         | KB 自动回退默认模板，问答正常                                                         |
+| 8   | 解绑（下拉选"默认模板"）→ 提问                                  | 回到默认模板行为                                                                      |
+| 9   | 删除会话                                                        | chat_message 该 session 记录清空（chatMemory.clear）                                  |
+| 10  | 绑定他人模板 id（手工构造请求）                                 | 40400"模板不存在"（归属校验）                                                         |
+| 11  | 前端：模板 CRUD + KB 绑定下拉                                   | 全流程可操作，选中值正确回显                                                          |
+| 12  | Knife4j（`/api/doc.html`）                                      | /prompt 4 个接口文档正常展示                                                          |
+| 13  | 同一 user_template 同时含 `{references}` 与 `{referencesBlock}` | `{references}` 与 `{referencesBlock}` 均被替换为实际值（`Map.of` 遍历顺序，MVP 接受） |
 
 ### 9.3 已知边界（MVP 接受）
 
@@ -2849,3 +2794,4 @@ cd ai-java-front && npm run type-check   # 前端类型检查
 - 模板正文字面 `{`/`}` 不会被解析（字面替换无 ST 冲突），但形如 `{foo}` 的非白名单词会在**创建时**被拦截——如需在正文中写 `{foo}` 字面量，MVP 无转义机制（边界外）
 - NSelect 的 value=0：naive-ui 以 `===` 比较，0 可作为合法选中值；若出现无法选中「默认模板」，改用 `clearable` + `null` 回显，提交时把 `null` 映射为 `0`
 - 提问原文若恰好含子串 `{references}`，渲染时可能被二次替换（用户输入撞占位符，MVP 接受）
+- `render()` 中 `Map.of` 遍历顺序不定，`{referencesBlock}` 可能在 `{references}` 之前或之后被替换；模板中同时使用两个变量时，MVP 接受此行为

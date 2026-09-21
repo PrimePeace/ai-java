@@ -79,6 +79,15 @@ agent:
   chunk-size: 800
   top-k: 5
   history-rounds: 10
+  fine-tune:
+    upload-dir: ./uploads/fine_tune
+    qa-per-chunk: 3
+    # 微调资源包专用 Key（优先 AGENT_FT_API_KEY）；未配置时回退 chat Key
+    # 基座模型固定走 glm-4-flash（与已购微调资源包对齐）
+    api-key: ${AGENT_FT_API_KEY:${AI_CHAT_API_KEY:${AI_API_KEY:c22a98ee66af478dba0d508ebce53cf9.95rjnJkGUhFsawRi}}}
+    base-url: ${AI_CHAT_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+    default-base-model: glm-4-flash
+    poll-interval-ms: 30000
 
 mcp:
   security:

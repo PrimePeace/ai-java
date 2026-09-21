@@ -28,7 +28,12 @@ const kbs = ref<KnowledgeBase[]>([]);
 const templates = ref<PromptTemplate[]>([]);
 const showCreate = ref(false);
 const editingKb = ref<KnowledgeBase | null>(null);
-const kbForm = ref({ name: "", description: "", promptTemplateId: 0 });
+const kbForm = ref({
+  name: "",
+  description: "",
+  promptTemplateId: 0,
+  chatEngine: "rag" as "rag" | "ft" | "auto",
+});
 
 const isEdit = computed(() => editingKb.value !== null);
 
@@ -37,6 +42,13 @@ const templateOptions = computed(() => [
   { label: "默认模板", value: 0 },
   ...templates.value.map((t) => ({ label: t.name, value: t.id })),
 ]);
+
+// 问答引擎选项
+const engineOptions = [
+  { label: "RAG 检索增强（默认）", value: "rag" },
+  { label: "微调模型（需已绑定模型）", value: "ft" },
+  { label: "自动（有微调模型走微调，否则回退 RAG）", value: "auto" },
+];
 
 onMounted(() => {
   fetchKbs();
@@ -63,7 +75,7 @@ async function fetchTemplates() {
 
 function openCreate() {
   editingKb.value = null;
-  kbForm.value = { name: "", description: "", promptTemplateId: 0 };
+  kbForm.value = { name: "", description: "", promptTemplateId: 0, chatEngine: "rag" };
   showCreate.value = true;
 }
 
@@ -74,8 +86,29 @@ function openEdit(kb: KnowledgeBase) {
     description: kb.description,
     // null=默认模板，下拉统一用 0 表示
     promptTemplateId: kb.promptTemplateId ?? 0,
+    chatEngine: kb.chatEngine ?? "rag",
   };
   showCreate.value = true;
+}
+
+/** 解绑微调模型（ftModelId 置空，引擎回退 rag） */
+async function handleUnbindFtModel() {
+  if (!editingKb.value) return;
+  try {
+    await updateKbApi({
+      id: editingKb.value.id,
+      name: kbForm.value.name,
+      description: kbForm.value.description,
+      ftModelId: "",
+      chatEngine: "rag",
+    });
+    editingKb.value.ftModelId = null;
+    kbForm.value.chatEngine = "rag";
+    message.success("已解绑微调模型");
+    await fetchKbs();
+  } catch (e: any) {
+    message.error(e.message || "解绑失败");
+  }
 }
 
 async function handleSave() {
@@ -90,6 +123,7 @@ async function handleSave() {
         name: kbForm.value.name,
         description: kbForm.value.description,
         promptTemplateId: kbForm.value.promptTemplateId,
+        chatEngine: kbForm.value.chatEngine,
       };
       await updateKbApi(data);
       message.success("已更新");
@@ -184,6 +218,21 @@ function enterDetail(kb: KnowledgeBase) {
             :options="templateOptions"
             placeholder="选择提示词模板"
         />
+        <p class="kb-form-label">问答引擎</p>
+        <NSelect
+            v-model:value="kbForm.chatEngine"
+            :options="engineOptions"
+            placeholder="选择问答引擎"
+        />
+        <template v-if="editingKb?.ftModelId">
+          <p class="kb-form-label">已绑定微调模型</p>
+          <div class="ft-model-row">
+            <span class="ft-model-id">{{ editingKb.ftModelId }}</span>
+            <NButton size="tiny" tertiary type="error" @click="handleUnbindFtModel">
+              解绑
+            </NButton>
+          </div>
+        </template>
       </template>
     </NModal>
   </div>
@@ -220,6 +269,17 @@ function enterDetail(kb: KnowledgeBase) {
   font-size: 13px;
   font-weight: 600;
   color: #334155;
+}
+.ft-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ft-model-id {
+  font-size: 12px;
+  color: #64748b;
+  word-break: break-all;
 }
 .empty {
   text-align: center;

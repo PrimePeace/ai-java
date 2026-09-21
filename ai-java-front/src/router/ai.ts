@@ -21,6 +21,12 @@ export const aiRoutes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, title: "提示词模板", menu: "prompt" },
   },
   {
+    path: "fine-tune",
+    name: "fine-tune",
+    component: () => import("@/views/ai/FineTuneView.vue"),
+    meta: { requiresAuth: true, title: "模型微调", menu: "fine-tune" },
+  },
+  {
     path: "chat",
     name: "chat",
     component: () => import("@/views/ai/ChatView.vue"),

@@ -91,6 +91,8 @@ public class KnowledgeBaseService {
                 .name(kb.getName())
                 .description(kb.getDescription())
                 .promptTemplateId(null)
+                .chatEngine("rag")
+                .ftModelId(null)
                 .docCount(0L)
                 .createTime(kb.getCreateTime())
                 .updateTime(kb.getUpdateTime())
@@ -119,6 +121,8 @@ public class KnowledgeBaseService {
                 .name(kb.getName())
                 .description(kb.getDescription())
                 .promptTemplateId(kb.getPromptTemplateId())
+                .chatEngine(kb.getChatEngine())
+                .ftModelId(kb.getFtModelId())
                 .docCount(countMap.getOrDefault(kb.getId(), 0L))
                 .createTime(kb.getCreateTime())
                 .updateTime(kb.getUpdateTime())
@@ -126,8 +130,10 @@ public class KnowledgeBaseService {
     }
 
     /**
-     * 修改知识库（名称/描述 + 可选模板绑定）
+     * 修改知识库（名称/描述 + 可选模板绑定 + 可选问答引擎/微调模型绑定）
      * promptTemplateId 语义：null=不修改；0=解绑；>0=绑定（校验归属）
+     * chatEngine 语义：null=不修改；rag/ft/auto（DTO 已白名单校验）
+     * ftModelId 语义：null=不修改；空串=解绑；非空=绑定
      */
     public void update(KnowledgeBaseUpdateRequest request) {
         KnowledgeBase kb = getOwnedKb(request.getId());
@@ -147,6 +153,19 @@ public class KnowledgeBaseService {
             bindUpdate.setId(kb.getId());
             bindUpdate.setPromptTemplateId(templateId > 0 ? templateId : null);
             knowledgeBaseMapper.update(bindUpdate);
+        }
+        // 问答引擎 + 微调模型绑定（解绑置空必须走 UpdateEntity）
+        if (request.getChatEngine() != null || request.getFtModelId() != null) {
+            KnowledgeBase engineUpdate = UpdateEntity.of(KnowledgeBase.class);
+            engineUpdate.setId(kb.getId());
+            if (request.getChatEngine() != null) {
+                engineUpdate.setChatEngine(request.getChatEngine());
+            }
+            if (request.getFtModelId() != null) {
+                String ftModelId = request.getFtModelId().isBlank() ? null : request.getFtModelId();
+                engineUpdate.setFtModelId(ftModelId);
+            }
+            knowledgeBaseMapper.update(engineUpdate);
         }
     }
 

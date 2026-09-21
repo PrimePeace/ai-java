@@ -9,31 +9,29 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 知识库视图对象（含文档数实时统计）
+ * 微调数据集视图
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class KnowledgeBaseVO {
+public class FineTuneDatasetVO {
 
     private Long id;
+
+    private Long kbId;
 
     private String name;
 
     private String description;
 
-    /** 绑定的提示词模板 ID（NULL=默认模板；前端下拉选中值） */
-    private Long promptTemplateId;
+    private String format;
 
-    /** 问答引擎：rag / ft / auto */
-    private String chatEngine;
+    private Integer sampleCount;
 
-    /** 绑定的微调模型 ID（NULL=未绑定） */
-    private String ftModelId;
+    private String status;
 
-    /** 文档数（GROUP BY 实时统计，不冗余字段） */
-    private Long docCount;
+    private String errorMessage;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

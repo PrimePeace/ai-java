@@ -33,6 +33,12 @@ public class KnowledgeBase {
     /** 绑定的提示词模板 ID（NULL=默认模板，弱引用，模板删除时自动解绑） */
     private Long promptTemplateId;
 
+    /** 问答引擎：rag=纯 RAG 链路；ft=纯微调模型；auto=有微调模型走微调，否则回退 RAG */
+    private String chatEngine;
+
+    /** 绑定的微调模型 ID（NULL=未绑定，微调任务成功后自动回填） */
+    private String ftModelId;
+
     /** 创建者用户 ID */
     private Long userId;
 

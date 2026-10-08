@@ -47,14 +47,16 @@ export function renderChatMarkdown(source: string, streaming = false): string {
 
   let index = 0;
   while (index < lines.length) {
-    const line = lines[index];
+    const line = lines[index] ?? "";
 
     if (line.startsWith("```")) {
       closeList();
       const code: string[] = [];
       index += 1;
-      while (index < lines.length && !lines[index].startsWith("```")) {
-        code.push(lines[index]);
+      while (index < lines.length) {
+        const codeLine = lines[index] ?? "";
+        if (codeLine.startsWith("```")) break;
+        code.push(codeLine);
         index += 1;
       }
       if (index < lines.length) index += 1;
@@ -63,26 +65,28 @@ export function renderChatMarkdown(source: string, streaming = false): string {
     }
 
     const heading = /^(#{1,3})\s*(.+)$/.exec(line);
-    if (heading) {
+    const marks = heading?.[1];
+    const title = heading?.[2];
+    if (marks && title) {
       closeList();
-      const level = heading[1].length;
-      html.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+      const level = marks.length;
+      html.push(`<h${level}>${renderInline(title)}</h${level}>`);
       index += 1;
       continue;
     }
 
-    const unordered = /^[-*]\s+(.+)$/.exec(line);
+    const unordered = /^[-*]\s+(.+)$/.exec(line)?.[1];
     if (unordered) {
       openList("ul");
-      html.push(`<li>${renderInline(unordered[1])}</li>`);
+      html.push(`<li>${renderInline(unordered)}</li>`);
       index += 1;
       continue;
     }
 
-    const ordered = /^\d+[.、]\s*(.+)$/.exec(line);
+    const ordered = /^\d+[.、]\s*(.+)$/.exec(line)?.[1];
     if (ordered) {
       openList("ol");
-      html.push(`<li>${renderInline(ordered[1])}</li>`);
+      html.push(`<li>${renderInline(ordered)}</li>`);
       index += 1;
       continue;
     }

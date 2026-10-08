@@ -42,6 +42,12 @@ public class ChatMessage {
     /** 引用 JSON 数组（仅 assistant 消息，内容快照） */
     private String citations;
 
+    /** 输入 token 数（仅 assistant 消息，来自 LLM usage） */
+    private Integer promptTokens;
+
+    /** 输出 token 数（仅 assistant 消息，来自 LLM usage） */
+    private Integer completionTokens;
+
     /** 创建时间 */
     private LocalDateTime createTime;
 }

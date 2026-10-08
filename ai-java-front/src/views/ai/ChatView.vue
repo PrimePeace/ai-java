@@ -43,6 +43,15 @@ const { send, abort, isStreaming, assistantContent } = useChatStream({
   },
 });
 
+const cardContentStyle = {
+  padding: "0",
+  display: "flex",
+  flexDirection: "column",
+  flex: "1",
+  minHeight: "0",
+  overflow: "hidden",
+};
+
 const inputDisabled = computed(() => isStreaming.value || !sessionId.value);
 const inputPlaceholder = computed(() => {
   if (!kbId.value) return "请先选择知识库";
@@ -130,17 +139,14 @@ function handleChangeKb(id: number) {
       />
     </div>
     <div class="chat-main">
-      <NCard class="chat-card">
+      <NCard class="chat-card" :content-style="cardContentStyle">
         <template #header>
-          <NSpace justify="space-between">
-            <span>AI 问答</span>
-            <div class="drawer-triggers">
-              <NSpace>
-                <NButton size="small" @click="showLeft = true">会话</NButton>
-                <NButton size="small" @click="showRight = true">引用</NButton>
-              </NSpace>
-            </div>
-          </NSpace>
+          <div class="drawer-triggers">
+            <NSpace>
+              <NButton size="small" @click="showLeft = true">会话</NButton>
+              <NButton size="small" @click="showRight = true">引用</NButton>
+            </NSpace>
+          </div>
         </template>
         <MessageList
           :messages="messages"

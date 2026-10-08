@@ -34,9 +34,11 @@ spring:
         api-key: ${AI_CHAT_API_KEY:${AI_API_KEY:4a241b248b0b44639bab2fb5ff8e3335.cna3n4wFfmtMBUk2}}
         base-url: ${AI_CHAT_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
         model: glm-5.3-flash
+        # glm-5.3-flash 强制思考，type 只能是 enabled；推理深度取 low / high / max
         extra-body:
           thinking:
-              type: disabled
+            type: enabled
+          reasoning_effort: low
       embedding:
         api-key: ${AI_EMBEDDING_API_KEY:${AI_API_KEY:4a241b248b0b44639bab2fb5ff8e3335.cna3n4wFfmtMBUk2}}
         base-url: ${AI_EMBEDDING_BASE_URL:https://open.bigmodel.cn/api/paas/v4}

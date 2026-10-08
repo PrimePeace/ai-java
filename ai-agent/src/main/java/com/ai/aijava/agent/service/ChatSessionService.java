@@ -5,6 +5,7 @@ import com.ai.aijava.agent.dto.request.ChatSessionCreateRequest;
 import com.ai.aijava.agent.dto.vo.ChatMessageVO;
 import com.ai.aijava.agent.dto.vo.ChatSessionVO;
 import com.ai.aijava.agent.dto.vo.CitationVO;
+import com.ai.aijava.agent.dto.vo.TokenUsageVO;
 import com.ai.aijava.agent.entity.ChatMessage;
 import com.ai.aijava.agent.entity.ChatSession;
 import com.ai.aijava.agent.entity.KnowledgeBase;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -166,6 +168,48 @@ public class ChatSessionService {
         update.setId(sessionId);
         update.setUpdateTime(LocalDateTime.now());
         chatSessionMapper.update(update);
+    }
+
+    /**
+     * 当前用户 Token 消耗汇总
+     * 两步查询避免 join：先取当前用户全部 sessionId，再聚合 chat_message 的 token 列；
+     * 聚合采用只 select 两列后 Java 内存求和（会话量级小，可接受，规避自定义聚合列的版本差异）
+     */
+    public TokenUsageVO summaryTokenUsage() {
+        Long userId = UserContext.getUserId();
+        // 第一步：当前用户全部会话 ID
+        List<Long> sessionIds = chatSessionMapper.selectListByQuery(
+                        QueryWrapper.create()
+                                .select(ChatSession::getId)
+                                .where(ChatSession::getUserId).eq(userId))
+                .stream().map(ChatSession::getId).toList();
+        // 无会话则直接返回全 0，避免空 IN 子句
+        if (sessionIds.isEmpty()) {
+            return TokenUsageVO.builder()
+                    .promptTokens(0L)
+                    .completionTokens(0L)
+                    .totalTokens(0L)
+                    .build();
+        }
+        // 必须带上主键：只选 token 列时，两列都为 NULL 的历史消息会被 MyBatis 映射成 null 元素
+        List<ChatMessage> messages = chatMessageMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .select(ChatMessage::getId, ChatMessage::getPromptTokens, ChatMessage::getCompletionTokens)
+                        .where(ChatMessage::getSessionId).in(sessionIds)
+                        .and(ChatMessage::getRole).eq(ChatMessage.ROLE_ASSISTANT));
+        long promptTokens = messages.stream()
+                .filter(Objects::nonNull)
+                .mapToLong(m -> m.getPromptTokens() == null ? 0L : m.getPromptTokens())
+                .sum();
+        long completionTokens = messages.stream()
+                .filter(Objects::nonNull)
+                .mapToLong(m -> m.getCompletionTokens() == null ? 0L : m.getCompletionTokens())
+                .sum();
+        return TokenUsageVO.builder()
+                .promptTokens(promptTokens)
+                .completionTokens(completionTokens)
+                .totalTokens(promptTokens + completionTokens)
+                .build();
     }
 
     /**

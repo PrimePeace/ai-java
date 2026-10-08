@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { ChatMessage } from "@/types/ai";
 import { NTag } from "naive-ui";
+import { renderChatMarkdown } from "@/utils/chatMarkdown";
+import { useFollowBottom } from "@/composables/useFollowBottom";
 
 interface Props {
   messages: ChatMessage[];
@@ -10,33 +13,46 @@ interface Props {
   errorText?: string;
 }
 
-withDefaults(defineProps<Props>(), { errorText: "" });
+const props = withDefaults(defineProps<Props>(), { errorText: "" });
+const listRef = ref<HTMLDivElement | null>(null);
+
+useFollowBottom(
+  listRef,
+  () =>
+    [
+      props.messages.length,
+      props.messages.at(-1)?.id,
+      props.streamingContent,
+      props.isStreaming,
+      props.hasError,
+    ] as const,
+);
 </script>
 
 <template>
-  <div class="message-list">
-    <div v-for="msg in messages" :key="msg.id" :class="['message', msg.role]">
-      <span class="role">{{ msg.role === "user" ? "你" : "AI" }}</span>
-      <div class="bubble" v-if="msg.role === 'user'">{{ msg.content }}</div>
-      <div class="bubble assistant" v-else>
-        <pre class="content">{{ msg.content }}</pre>
-        <div v-if="msg.citations?.length" class="cite-hint">
-          📎 {{ msg.citations.length }} 条引用
+  <div ref="listRef" class="message-list">
+    <div class="thread">
+      <div v-for="msg in messages" :key="msg.id" :class="['msg', msg.role]">
+        <span class="avatar">{{ msg.role === "user" ? "你" : "AI" }}</span>
+        <div class="bubble">
+          <div class="md" v-html="renderChatMarkdown(msg.content)" />
+          <div v-if="msg.citations?.length" class="cite">
+            {{ msg.citations.length }} 条引用
+          </div>
         </div>
       </div>
-    </div>
-    <!-- 流式气泡 -->
-    <div v-if="isStreaming" class="message assistant">
-      <span class="role">AI</span>
-      <div class="bubble assistant">
-        <pre
-          class="content">{{ streamingContent }}<span class="cursor">▌</span></pre>
+      <div v-if="isStreaming" class="msg assistant">
+        <span class="avatar">AI</span>
+        <div class="bubble">
+          <div class="md" v-html="renderChatMarkdown(streamingContent, true)" />
+        </div>
       </div>
-    </div>
-    <div v-if="hasError" class="message assistant">
-      <NTag type="error" size="small">{{
-        errorText || "回答失败，可重发"
-      }}</NTag>
+      <div v-if="hasError" class="msg assistant">
+        <span class="avatar">AI</span>
+        <NTag type="error" size="small">{{
+          errorText || "回答失败，可重发"
+        }}</NTag>
+      </div>
     </div>
   </div>
 </template>
@@ -44,44 +60,146 @@ withDefaults(defineProps<Props>(), { errorText: "" });
 <style scoped>
 .message-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  overflow-anchor: none;
+  padding: 20px 24px 12px;
+  background: #f5f6fa;
 }
-.message {
-  margin-bottom: 16px;
+
+.thread {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
-.message.user {
-  text-align: right;
+
+.msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
-.role {
-  font-size: 12px;
-  color: #999;
-  font-weight: bold;
+
+.msg.user {
+  flex-direction: row-reverse;
 }
+
+.avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.msg.assistant .avatar {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.msg.user .avatar {
+  background: #6366f1;
+  color: #ffffff;
+}
+
 .bubble {
-  display: inline-block;
-  max-width: 80%;
-  padding: 8px 12px;
-  border-radius: 8px;
+  max-width: min(720px, calc(100% - 38px));
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 4px 12px 12px 12px;
+  background: #ffffff;
+  border: 1px solid #e7e9f0;
+  color: #1e293b;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.msg.user .bubble {
+  border-radius: 12px 4px 12px 12px;
+  background: #eef2ff;
+  border-color: #e0e7ff;
+  color: #1e1b4b;
+}
+
+.md :deep(h1),
+.md :deep(h2),
+.md :deep(h3) {
+  margin: 12px 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.md :deep(p) {
+  margin: 0 0 8px;
+}
+
+.md :deep(ul),
+.md :deep(ol) {
+  margin: 4px 0 8px;
+  padding-left: 1.25em;
+}
+
+.md :deep(li) {
+  margin: 2px 0;
+}
+
+.md :deep(li + li) {
   margin-top: 4px;
 }
-.bubble.assistant {
-  background-color: #f1f5f9;
-  text-align: left;
+
+.md :deep(:first-child) {
+  margin-top: 0;
 }
-.message.user .bubble {
-  background-color: #eef2ff;
-  color: #312e81;
+
+.md :deep(:last-child) {
+  margin-bottom: 0;
 }
-.content {
+
+.md :deep(strong) {
+  font-weight: 600;
+}
+
+.md :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  background: #f1f5f9;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.md :deep(pre) {
+  margin: 8px 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e7e9f0;
+}
+
+.md :deep(pre code) {
+  padding: 0;
+  background: transparent;
   white-space: pre-wrap;
   word-break: break-word;
-  margin: 0;
-  font-family: inherit;
 }
-.cursor {
-  animation: blink 1s infinite;
+
+.md {
+  overflow-wrap: anywhere;
 }
+
+.md :deep(.cursor) {
+  color: #6366f1;
+  animation: blink 1s step-end infinite;
+}
+
 @keyframes blink {
   0%,
   50% {
@@ -92,9 +210,15 @@ withDefaults(defineProps<Props>(), { errorText: "" });
     opacity: 0;
   }
 }
-.cite-hint {
+
+.cite {
+  display: inline-flex;
+  margin-top: 10px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
   font-size: 12px;
-  color: #18a058;
-  margin-top: 4px;
+  line-height: 20px;
 }
 </style>

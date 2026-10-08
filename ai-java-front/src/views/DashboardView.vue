@@ -10,9 +10,14 @@ import {
 import StatCard from "@/components/dashboard/StatCard.vue";
 import KbDocChart from "@/components/dashboard/KbDocChart.vue";
 import RecentSessionPanel from "@/components/dashboard/RecentSessionPanel.vue";
+import TokenUsagePanel from "@/components/dashboard/TokenUsagePanel.vue";
 import { listKbsApi } from "@/api/kb";
-import { listSessionsApi } from "@/api/chat";
-import type { ChatSession, KnowledgeBase } from "@/types/ai";
+import { getTokenUsageSummaryApi, listSessionsApi } from "@/api/chat";
+import type {
+  ChatSession,
+  KnowledgeBase,
+  TokenUsageSummary,
+} from "@/types/ai";
 import { useUserStore } from "@/stores/user";
 import { BRAND_GRADIENT } from "@/styles/theme";
 
@@ -22,6 +27,8 @@ const userStore = useUserStore();
 
 const kbs = ref<KnowledgeBase[]>([]);
 const sessions = ref<ChatSession[]>([]);
+/** Token 消耗汇总；null 表示加载中（面板显示占位符） */
+const tokenUsage = ref<TokenUsageSummary | null>(null);
 const loading = ref(true);
 
 const greeting = computed(() => {
@@ -47,12 +54,19 @@ const chartData = computed(() =>
 
 onMounted(async () => {
   try {
-    const [kbRes, sessionRes] = await Promise.all([
+    const [kbRes, sessionRes, usageRes] = await Promise.all([
       listKbsApi(),
       listSessionsApi(),
+      // Token 接口失败不阻塞其他数据，回落为全 0
+      getTokenUsageSummaryApi().catch(() => null),
     ]);
     kbs.value = kbRes.data ?? [];
     sessions.value = sessionRes.data ?? [];
+    tokenUsage.value = usageRes?.data ?? {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "数据加载失败";
     message.error(msg);
@@ -108,6 +122,11 @@ onMounted(async () => {
           :icon="ChatbubblesOutline"
           tone="cyan"
         />
+      </div>
+
+      <!-- Token 消耗面板 -->
+      <div class="usage-panel">
+        <TokenUsagePanel :usage="tokenUsage" />
       </div>
 
       <!-- 图表 + 最近会话 -->
@@ -170,6 +189,10 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 3fr 2fr;
   gap: 20px;
+}
+
+.usage-panel {
+  margin-top: 20px;
 }
 
 .panel-card {

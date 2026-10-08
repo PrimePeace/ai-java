@@ -6,6 +6,7 @@ import com.ai.aijava.agent.memory.DbChatMemory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.http.codec.ServerSentEvent;
@@ -13,8 +14,10 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * SSE 事件流装配器：ChatModel Flux → message / citations / end / error 事件
@@ -34,12 +37,18 @@ public class SseChatAssembler {
     public Flux<ServerSentEvent<String>> assemble(Flux<ChatResponse> responseFlux, Long sessionId,
                                                   List<CitationVO> citations) {
         StringBuilder aggregated = new StringBuilder();
+        // 记录流式过程中最后一个非空 usage（GLM 流式在末尾 chunk 返回 token 用量）
+        AtomicReference<Usage> lastUsage = new AtomicReference<>();
         return responseFlux
                 .doOnNext(chunk -> {
                     String content = chunk.getResult() != null && chunk.getResult().getOutput() != null
                             ? chunk.getResult().getOutput().getText() : "";
                     if (content != null && !content.isBlank()) {
                         aggregated.append(content);
+                    }
+                    // 采集真实 token 用量：保留最后一个非空 usage
+                    if (chunk.getMetadata() != null && chunk.getMetadata().getUsage() != null) {
+                        lastUsage.set(chunk.getMetadata().getUsage());
                     }
                 })
                 .mapNotNull(chunk -> {
@@ -56,10 +65,22 @@ public class SseChatAssembler {
                 .doOnComplete(() -> {
                     try {
                         String citationsJson = JSONUtil.toJsonStr(citations);
-                        // assistant 落库：citations 通过 metadata 传递（DbChatMemory 取出落列）
+                        // assistant 落库：citations、token 用量通过 metadata 传递（DbChatMemory 取出落列）
+                        Map<String, Object> properties = new HashMap<>();
+                        properties.put(DbChatMemory.CITATIONS_KEY, citationsJson);
+                        // 仅在有 usage 时写入 token 用量（null 不写入、不报错）
+                        Usage usage = lastUsage.get();
+                        if (usage != null) {
+                            if (usage.getPromptTokens() != null) {
+                                properties.put(DbChatMemory.PROMPT_TOKENS_KEY, usage.getPromptTokens());
+                            }
+                            if (usage.getCompletionTokens() != null) {
+                                properties.put(DbChatMemory.COMPLETION_TOKENS_KEY, usage.getCompletionTokens());
+                            }
+                        }
                         chatMemory.add(String.valueOf(sessionId), AssistantMessage.builder()
                                 .content(aggregated.toString())
-                                .properties(Map.of(DbChatMemory.CITATIONS_KEY, citationsJson))
+                                .properties(properties)
                                 .build());
                         chatSessionService.refreshSessionActiveTime(sessionId);
                     } catch (Exception e) {

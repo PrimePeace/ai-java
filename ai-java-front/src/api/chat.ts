@@ -4,6 +4,7 @@ import type {
   ChatSession,
   ChatMessage,
   CreateSessionRequest,
+  TokenUsageSummary,
 } from "@/types/ai";
 
 /** 创建会话 */
@@ -32,4 +33,11 @@ export function deleteSessionApi(
   sessionId: number,
 ): Promise<BaseResponse<null>> {
   return request.delete(`/chat/session/${sessionId}`);
+}
+
+/** Token 消耗汇总 */
+export function getTokenUsageSummaryApi(): Promise<
+  BaseResponse<TokenUsageSummary>
+> {
+  return request.get("/chat/token-usage/summary");
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { NInput, NButton, NSpace } from "naive-ui";
+import { NInput, NButton } from "naive-ui";
 
 const emit = defineEmits<{
   (e: "send", question: string): void;
@@ -34,7 +34,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="chat-input">
-    <NSpace vertical>
+    <div class="composer">
       <NInput
         v-model:value="question"
         type="textarea"
@@ -43,20 +43,34 @@ function handleKeydown(e: KeyboardEvent) {
         :disabled="disabled"
         @keydown="handleKeydown"
       />
-      <NButton
-        type="primary"
-        :disabled="disabled || !question.trim()"
-        @click="handleSend"
-      >
-        发送
-      </NButton>
-    </NSpace>
+      <div class="composer-actions">
+        <NButton
+          type="primary"
+          :disabled="disabled || !question.trim()"
+          @click="handleSend"
+        >
+          发送
+        </NButton>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .chat-input {
-  padding: 12px;
-  border-top: 1px solid #eee;
+  padding: 12px 16px 14px;
+  background: #ffffff;
+  border-top: 1px solid #e7e9f0;
+}
+
+.composer {
+  width: min(820px, 100%);
+  margin: 0 auto;
+}
+
+.composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 </style>

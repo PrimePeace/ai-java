@@ -4,6 +4,7 @@ import com.ai.aijava.agent.dto.request.ChatSendRequest;
 import com.ai.aijava.agent.dto.request.ChatSessionCreateRequest;
 import com.ai.aijava.agent.dto.vo.ChatMessageVO;
 import com.ai.aijava.agent.dto.vo.ChatSessionVO;
+import com.ai.aijava.agent.dto.vo.TokenUsageVO;
 import com.ai.aijava.agent.service.ChatSessionService;
 import com.ai.aijava.agent.service.RagChatService;
 import com.ai.aijava.annotation.RequireLogin;
@@ -67,6 +68,13 @@ public class ChatController {
     public BaseResponse<Void> deleteSession(@PathVariable Long sessionId) {
         chatSessionService.deleteSession(sessionId);
         return ResultUtils.success(null);
+    }
+
+    @Operation(summary = "Token 消耗汇总")
+    @RequireLogin
+    @GetMapping("/token-usage/summary")
+    public BaseResponse<TokenUsageVO> tokenUsageSummary() {
+        return ResultUtils.success(chatSessionService.summaryTokenUsage());
     }
 
     @Operation(summary = "提问（SSE 流式响应，4.2 事件协议）")

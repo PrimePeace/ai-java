@@ -108,8 +108,10 @@ CREATE TABLE `chat_message` (
     `session_id`  BIGINT      NOT NULL COMMENT '所属会话ID',
     `role`        VARCHAR(16) NOT NULL COMMENT '角色（user/assistant）',
     `content`     MEDIUMTEXT  NOT NULL COMMENT '消息内容',
-    `citations`   MEDIUMTEXT  DEFAULT NULL COMMENT '引用JSON数组（仅assistant消息：[{docId,docName,chunkIndex,content,score}]）',
-    `create_time` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `citations`         MEDIUMTEXT  DEFAULT NULL COMMENT '引用JSON数组（仅assistant消息：[{docId,docName,chunkIndex,content,score}]）',
+    `prompt_tokens`     INT         DEFAULT NULL COMMENT '输入 token 数（assistant 消息）',
+    `completion_tokens` INT         DEFAULT NULL COMMENT '输出 token 数（assistant 消息）',
+    `create_time`       DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     INDEX `idx_session_id` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对话消息表';

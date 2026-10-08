@@ -112,3 +112,10 @@ export interface CreateSessionRequest {
 export interface ChatSendRequest {
   question: string;
 }
+
+/** Token 消耗汇总（后端 /chat/token-usage/summary 返回，数值可能为 0） */
+export interface TokenUsageSummary {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}

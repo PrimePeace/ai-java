@@ -40,6 +40,12 @@ public class DbChatMemory implements ChatMemory {
     /** assistant 消息 metadata 中携带 citations JSON 的 key */
     public static final String CITATIONS_KEY = "citations";
 
+    /** assistant 消息 metadata 中携带 prompt tokens 的 key */
+    public static final String PROMPT_TOKENS_KEY = "promptTokens";
+
+    /** assistant 消息 metadata 中携带 completion tokens 的 key */
+    public static final String COMPLETION_TOKENS_KEY = "completionTokens";
+
     private final ChatMessageMapper chatMessageMapper;
     private final AgentProperties agentProperties;
 
@@ -105,10 +111,19 @@ public class DbChatMemory implements ChatMemory {
      */
     private ChatMessage toEntity(long sessionId, Message message) {
         String citations = null;
+        Integer promptTokens = null;
+        Integer completionTokens = null;
         if (message.getMetadata() != null) {
             Object cite = message.getMetadata().get(CITATIONS_KEY);
             if (cite instanceof String s && !s.isBlank()) {
                 citations = s;
+            }
+            // token 用量从 metadata 取出（Number 统一转 Integer，兼容 Long/Integer）
+            if (message.getMetadata().get(PROMPT_TOKENS_KEY) instanceof Number n) {
+                promptTokens = n.intValue();
+            }
+            if (message.getMetadata().get(COMPLETION_TOKENS_KEY) instanceof Number n) {
+                completionTokens = n.intValue();
             }
         }
         boolean isUser = message instanceof UserMessage;
@@ -117,6 +132,8 @@ public class DbChatMemory implements ChatMemory {
                 .role(isUser ? ChatMessage.ROLE_USER : ChatMessage.ROLE_ASSISTANT)
                 .content(message.getText() == null ? "" : message.getText())
                 .citations(citations)
+                .promptTokens(promptTokens)
+                .completionTokens(completionTokens)
                 .createTime(LocalDateTime.now())
                 .build();
     }

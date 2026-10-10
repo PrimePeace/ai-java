@@ -61,6 +61,12 @@ public class User {
      */
     private Integer status;
 
+    /** 角色 ID */
+    private Long roleId;
+
+    /** 此时间及之前签发的 Refresh Token 失效 */
+    private LocalDateTime refreshInvalidBefore;
+
     /** 记录创建时间 */
     private LocalDateTime createTime;
 

@@ -24,7 +24,7 @@ const userStore = useUserStore();
 const message = useMessage();
 const dialog = useDialog();
 
-const pageTitle = computed(() => (route.meta.title as string) || "仪表盘");
+const pageTitle = computed(() => (route.meta.title as string) || "AI 知识库");
 // 智能问答等页面需要占满内容区，去掉内边距
 const isFullscreen = computed(() => !!route.meta.fullscreen);
 const displayName = computed(
@@ -49,8 +49,8 @@ function handleUserSelect(key: string) {
     content: "退出后需要重新登录，是否继续？",
     positiveText: "确认退出",
     negativeText: "取消",
-    onPositiveClick: () => {
-      userStore.logout();
+    onPositiveClick: async () => {
+      await userStore.logout();
       message.success("已退出登录");
       router.push("/login");
     },

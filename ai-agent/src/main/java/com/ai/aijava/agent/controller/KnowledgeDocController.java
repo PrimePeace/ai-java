@@ -5,6 +5,8 @@ import com.ai.aijava.agent.service.DocumentIngestService;
 import com.ai.aijava.agent.service.KnowledgeBaseService;
 import com.ai.aijava.annotation.AuditLog;
 import com.ai.aijava.annotation.RequireLogin;
+import com.ai.aijava.annotation.RequirePermission;
+import com.ai.aijava.auth.Permissions;
 import com.ai.aijava.audit.AuditLogType;
 import com.ai.aijava.common.BaseResponse;
 import com.ai.aijava.common.ResultUtils;
@@ -36,6 +38,7 @@ public class KnowledgeDocController {
 
     @Operation(summary = "上传文档（异步摄取，返回 docId）")
     @RequireLogin
+    @RequirePermission(Permissions.KB_EDIT)
     @AuditLog(type = AuditLogType.DATA_CREATE, module = "知识库管理", description = "上传文档")
     @PostMapping("/{kbId}/document/upload")
     public BaseResponse<Long> upload(@PathVariable Long kbId, @RequestParam("file") MultipartFile file) {
@@ -44,6 +47,7 @@ public class KnowledgeDocController {
 
     @Operation(summary = "文档列表（含摄取状态，兼作进度轮询）")
     @RequireLogin
+    @RequirePermission(Permissions.KB_VIEW)
     @GetMapping("/{kbId}/document/list")
     public BaseResponse<List<KnowledgeDocumentVO>> listDocuments(@PathVariable Long kbId) {
         return ResultUtils.success(knowledgeBaseService.listDocuments(kbId));
@@ -51,6 +55,7 @@ public class KnowledgeDocController {
 
     @Operation(summary = "删除文档（级联清理切片/向量/文件）")
     @RequireLogin
+    @RequirePermission(Permissions.KB_EDIT)
     @AuditLog(type = AuditLogType.DATA_DELETE, module = "知识库管理", description = "删除文档")
     @DeleteMapping("/document/{docId}")
     public BaseResponse<Void> deleteDocument(@PathVariable Long docId) {

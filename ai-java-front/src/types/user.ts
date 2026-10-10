@@ -16,6 +16,9 @@ export interface UserVO {
   email?: string;
   phone?: string;
   status: number;
+  roleId?: number;
+  roleCode?: string;
+  roleName?: string;
   createTime: string;
 }
 

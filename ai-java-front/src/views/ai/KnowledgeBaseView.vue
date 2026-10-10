@@ -14,8 +14,8 @@ import {
 import type {
   KnowledgeBase,
   CreateKbRequest,
-  UpdateKbRequest,
   PromptTemplate,
+  UpdateKbRequest,
 } from "@/types/ai";
 import { createKbApi, listKbsApi, updateKbApi, deleteKbApi } from "@/api/kb";
 import { listPromptsApi } from "@/api/prompt";
@@ -37,10 +37,9 @@ const kbForm = ref({
 
 const isEdit = computed(() => editingKb.value !== null);
 
-// 下拉选项：默认模板（0） + 我的模板
 const templateOptions = computed(() => [
   { label: "默认模板", value: 0 },
-  ...templates.value.map((t) => ({ label: t.name, value: t.id })),
+  ...templates.value.map((item) => ({ label: item.name, value: item.id })),
 ]);
 
 // 问答引擎选项
@@ -72,7 +71,7 @@ async function fetchKbs() {
 async function fetchTemplates() {
   try {
     const res = await listPromptsApi();
-    templates.value = res.data;
+    templates.value = res.data ?? [];
   } catch (e: any) {
     message.error(e.message || "模板加载失败");
   }

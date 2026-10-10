@@ -82,6 +82,7 @@ public class KnowledgeBaseService {
                 .name(request.getName())
                 .description(request.getDescription())
                 .userId(userId)
+                .chatEngine("rag")
                 .createTime(now)
                 .updateTime(now)
                 .build();
@@ -91,7 +92,7 @@ public class KnowledgeBaseService {
                 .name(kb.getName())
                 .description(kb.getDescription())
                 .promptTemplateId(null)
-                .chatEngine("rag")
+                .chatEngine(kb.getChatEngine())
                 .stylePrompt(null)
                 .docCount(0L)
                 .createTime(kb.getCreateTime())

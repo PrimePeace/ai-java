@@ -6,6 +6,8 @@ import com.ai.aijava.agent.dto.vo.PromptTemplateVO;
 import com.ai.aijava.agent.service.PromptTemplateService;
 import com.ai.aijava.annotation.AuditLog;
 import com.ai.aijava.annotation.RequireLogin;
+import com.ai.aijava.annotation.RequirePermission;
+import com.ai.aijava.auth.Permissions;
 import com.ai.aijava.audit.AuditLogType;
 import com.ai.aijava.common.BaseResponse;
 import com.ai.aijava.common.ResultUtils;
@@ -27,6 +29,7 @@ import java.util.List;
  * 提示词模板管理接口
  */
 @Tag(name = "提示词模板")
+@RequirePermission(Permissions.PROMPT_USE)
 @RestController
 @RequestMapping("/prompt")
 @RequiredArgsConstructor

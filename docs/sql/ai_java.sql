@@ -10,11 +10,14 @@ CREATE TABLE `user` (
     `login_time` DATETIME DEFAULT NULL COMMENT '最后登录时间',
     `login_fail_count` INT DEFAULT 0 COMMENT '连续登录失败次数',
     `lock_time` DATETIME DEFAULT NULL COMMENT '账号锁定时间',
-    `status` TINYINT DEFAULT 1 COMMENT '状态: 0-禁用 1-启用',
+    `status` TINYINT DEFAULT 1 COMMENT '状态: 0-未激活 1-正常 2-已封禁 3-已注销',
+    `role_id` BIGINT DEFAULT NULL COMMENT '角色ID',
+    `refresh_invalid_before` DATETIME DEFAULT NULL COMMENT '此时间及之前签发的 Refresh Token 失效',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_username` (`username`)
+    UNIQUE KEY `uk_username` (`username`),
+    INDEX `idx_role_id` (`role_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
 -- 审计日志表（等保三级：记录登录、数据变更、权限变更等敏感操作）
@@ -189,3 +192,68 @@ CREATE TABLE `evaluation_record` (
     PRIMARY KEY (`id`),
     INDEX `idx_kb_id` (`kb_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评测记录表';
+
+-- 角色、菜单与授权。已有库请执行 docs/sql/2026-10-10-role-menu.sql，不要重复插入。
+CREATE TABLE `role` (
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '角色ID',
+    `code`        VARCHAR(32)  NOT NULL COMMENT '角色编码',
+    `name`        VARCHAR(64)  NOT NULL COMMENT '角色名称',
+    `status`      TINYINT      NOT NULL DEFAULT 1 COMMENT '1-启用 0-停用',
+    `remark`      VARCHAR(256) DEFAULT '' COMMENT '备注',
+    `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_role_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色表';
+
+CREATE TABLE `menu` (
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '菜单ID',
+    `parent_id`   BIGINT       NOT NULL DEFAULT 0 COMMENT '上级菜单ID，0为根',
+    `name`        VARCHAR(64)  NOT NULL COMMENT '菜单名称',
+    `path`        VARCHAR(128) DEFAULT NULL COMMENT '路由路径',
+    `component`   VARCHAR(128) DEFAULT NULL COMMENT '前端组件键',
+    `icon`        VARCHAR(64)  DEFAULT NULL COMMENT '图标名',
+    `sort`        INT          NOT NULL DEFAULT 0 COMMENT '排序',
+    `menu_type`   VARCHAR(16)  NOT NULL COMMENT 'CATALOG/MENU/BUTTON',
+    `permission`  VARCHAR(64)  DEFAULT NULL COMMENT '权限码',
+    `visible`     TINYINT      NOT NULL DEFAULT 1 COMMENT '1-显示在菜单 0-仅注册路由',
+    `client`      VARCHAR(16)  NOT NULL DEFAULT 'ALL' COMMENT 'WEB/APP/ALL',
+    `status`      TINYINT      NOT NULL DEFAULT 1 COMMENT '1-启用 0-停用',
+    `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='菜单与权限';
+
+CREATE TABLE `role_menu` (
+    `role_id` BIGINT NOT NULL COMMENT '角色ID',
+    `menu_id` BIGINT NOT NULL COMMENT '菜单ID',
+    PRIMARY KEY (`role_id`, `menu_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色菜单';
+
+INSERT INTO `role` (`id`, `code`, `name`, `status`, `remark`)
+VALUES (1, 'USER', '用户', 1, '普通用户'),
+       (2, 'ADMIN', '管理员', 1, '系统管理员');
+
+INSERT INTO `menu` (`id`, `parent_id`, `name`, `path`, `component`, `icon`, `sort`, `menu_type`, `permission`, `visible`, `client`, `status`)
+VALUES
+    (1, 0, '知识库', '/kb', 'kb/KnowledgeBaseView', 'library', 10, 'MENU', 'kb:view', 1, 'ALL', 1),
+    (2, 0, '知识库文档', '/kb/:id', 'kb/KnowledgeBaseDetailView', 'library', 11, 'MENU', 'kb:view', 0, 'ALL', 1),
+    (3, 0, '知识库编辑', NULL, NULL, NULL, 12, 'BUTTON', 'kb:edit', 0, 'ALL', 1),
+    (4, 0, '智能问答', '/chat', 'chat/ChatView', 'chatbubbles', 20, 'MENU', 'chat:use', 1, 'ALL', 1),
+    (13, 0, '仪表盘', '/dashboard', 'dashboard/DashboardView', 'grid', 1, 'MENU', NULL, 1, 'WEB', 1),
+    (14, 0, '提示词模板', '/prompt', 'prompt/PromptTemplateView', 'document', 15, 'MENU', 'prompt:use', 1, 'WEB', 1),
+    (15, 0, '回答风格', '/fine-tune', 'ft/FineTuneView', 'sparkles', 25, 'MENU', 'ft:use', 1, 'WEB', 1),
+    (5, 0, '用户管理', '/system/users', 'system/UserManageView', 'people', 10, 'MENU', 'user:list', 1, 'WEB', 1),
+    (6, 0, '封禁用户', NULL, NULL, NULL, 11, 'BUTTON', 'user:ban', 0, 'WEB', 1),
+    (7, 0, '调整角色', NULL, NULL, NULL, 12, 'BUTTON', 'user:assign-role', 0, 'WEB', 1),
+    (8, 0, '角色管理', '/system/roles', 'system/RoleManageView', 'shield', 20, 'MENU', 'role:view', 1, 'WEB', 1),
+    (9, 0, '分配菜单', NULL, NULL, NULL, 21, 'BUTTON', 'role:assign-menu', 0, 'WEB', 1),
+    (10, 0, '菜单管理', '/system/menus', 'system/MenuManageView', 'menu', 30, 'MENU', 'menu:view', 1, 'WEB', 1),
+    (11, 0, '编辑菜单', NULL, NULL, NULL, 31, 'BUTTON', 'menu:edit', 0, 'WEB', 1),
+    (12, 0, '审计日志', '/system/audit', 'system/AuditLogView', 'document', 40, 'MENU', 'audit:view', 1, 'WEB', 1);
+
+INSERT INTO `role_menu` (`role_id`, `menu_id`) VALUES
+    (1, 1), (1, 2), (1, 3), (1, 4), (1, 13), (1, 14), (1, 15),
+    (2, 1), (2, 2), (2, 3), (2, 4),
+    (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12),
+    (2, 13), (2, 14), (2, 15);

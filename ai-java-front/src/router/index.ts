@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useUserStore } from "@/stores/user";
-import { aiRoutes } from "./ai";
+import { useMenuStore } from "@/stores/menu";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,36 +18,50 @@ const router = createRouter({
       meta: { requiresGuest: true, title: "注册" },
     },
     {
-      // 受保护页面统一挂载主布局（侧边栏 + 顶栏）
+      path: "/403",
+      name: "forbidden",
+      component: () => import("@/views/error/ForbiddenView.vue"),
+      meta: { requiresAuth: true, title: "无权限" },
+    },
+    {
       path: "/",
+      name: "layout",
       component: () => import("@/layouts/MainLayout.vue"),
-      redirect: "/dashboard",
-      children: [
-        {
-          path: "dashboard",
-          name: "dashboard",
-          component: () => import("@/views/DashboardView.vue"),
-          meta: { requiresAuth: true, title: "仪表盘", menu: "dashboard" },
-        },
-        ...aiRoutes,
-      ],
+      meta: { requiresAuth: true },
+      children: [],
+    },
+    {
+      path: "/:pathMatch(.*)*",
+      name: "not-found",
+      component: () => import("@/views/error/ForbiddenView.vue"),
+      meta: { requiresAuth: true, title: "无权限" },
     },
   ],
 });
 
-// 路由守卫
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const userStore = useUserStore();
-  const isAuthenticated = !!userStore.accessToken;
+  const menuStore = useMenuStore();
+  const authed = !!userStore.accessToken;
 
-  // 需要登录但未登录 → 跳登录页
-  if (to.meta.requiresAuth && !isAuthenticated) {
+  if (to.meta.requiresAuth && !authed) {
     return { name: "login", query: { redirect: to.fullPath } };
   }
 
-  // 已登录访问登录/注册页 → 跳仪表盘
-  if (to.meta.requiresGuest && isAuthenticated) {
-    return { name: "dashboard" };
+  if (to.meta.requiresGuest && authed) {
+    if (!menuStore.loaded) {
+      await menuStore.load();
+    }
+    return menuStore.homePath() || { name: "forbidden" };
+  }
+
+  if (authed && to.name !== "login" && to.name !== "register" && !menuStore.loaded) {
+    await menuStore.load();
+    return to.fullPath;
+  }
+
+  if (authed && (to.path === "/" || to.name === "layout")) {
+    return menuStore.homePath() || { name: "forbidden" };
   }
 });
 

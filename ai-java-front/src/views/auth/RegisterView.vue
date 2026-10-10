@@ -25,16 +25,20 @@ const formData = ref({
 const rules: FormRules = {
   username: {
     required: true,
-    message: "请输入用户名",
     trigger: ["input", "blur"],
+    validator: (_rule, value: string) => {
+      if (!/^[A-Za-z0-9_]{4,32}$/.test(value || "")) {
+        return new Error("用户名须为 4-32 位字母、数字或下划线");
+      }
+      return true;
+    },
   },
   password: {
     required: true,
-    message: "请输入密码（至少8位）",
     trigger: ["input", "blur"],
     validator: (_rule, value: string) => {
-      if (!value || value.length < 8) {
-        return new Error("密码长度不能少于8位");
+      if (!/^(?=.*[A-Za-z])(?=.*\d).{8,64}$/.test(value || "")) {
+        return new Error("密码至少 8 位，且同时包含字母和数字");
       }
       return true;
     },

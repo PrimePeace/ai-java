@@ -41,3 +41,8 @@ export function refreshTokenApi(
 export function getCurrentUserApi(): Promise<BaseResponse<UserVO>> {
   return request.get("/user/current");
 }
+
+/** 退出登录，使 Refresh Token 失效 */
+export function logoutApi(): Promise<BaseResponse<null>> {
+  return request.post("/user/logout");
+}

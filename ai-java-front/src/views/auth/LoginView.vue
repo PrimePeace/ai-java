@@ -4,12 +4,14 @@ import { useRouter, useRoute } from "vue-router";
 import { NForm, NFormItem, NInput, NButton, useMessage } from "naive-ui";
 import type { FormInst, FormRules } from "naive-ui";
 import { useUserStore } from "@/stores/user";
+import { useMenuStore } from "@/stores/menu";
 import AuthBrandPanel from "@/components/auth/AuthBrandPanel.vue";
 
 const router = useRouter();
 const route = useRoute();
 const message = useMessage();
 const userStore = useUserStore();
+const menuStore = useMenuStore();
 
 const formRef = ref<FormInst | null>(null);
 const loading = ref(false);
@@ -46,8 +48,9 @@ async function handleSubmit() {
     loading.value = true;
     try {
       await userStore.login(formData.value);
+      await menuStore.load();
       message.success("登录成功");
-      const redirect = (route.query.redirect as string) || "/dashboard";
+      const redirect = (route.query.redirect as string) || menuStore.homePath() || "/403";
       router.push(redirect);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "登录失败，请重试";

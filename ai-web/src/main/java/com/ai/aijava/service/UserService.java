@@ -5,6 +5,7 @@ import com.ai.aijava.dto.request.UserLoginRequest;
 import com.ai.aijava.dto.request.UserRegisterRequest;
 import com.ai.aijava.dto.vo.UserLoginVO;
 import com.ai.aijava.dto.vo.UserVO;
+import com.ai.aijava.entity.Role;
 import com.ai.aijava.entity.User;
 import com.ai.aijava.exception.BusinessException;
 import com.ai.aijava.exception.ErrorCode;
@@ -31,15 +32,15 @@ public class UserService {
     private static final int LOCK_DURATION_MINUTES = 30;
 
     private final UserMapper userMapper;
+    private final AccountGate accountGate;
 
     /**
-     * 用户注册
+     * 用户注册。角色固定为 USER，请求体中的角色字段不存在也不会被读取。
      */
     public UserVO register(UserRegisterRequest request) {
-        // BCrypt 加密密码
+        Role userRole = accountGate.requireRoleByCode("USER");
         String encodedPassword = BCryptUtils.encode(request.getPassword());
 
-        // 构建用户实体
         LocalDateTime now = LocalDateTime.now();
         User user = User.builder()
                 .username(request.getUsername())
@@ -49,6 +50,7 @@ public class UserService {
                 .phone(request.getPhone() != null ? request.getPhone() : "")
                 .loginFailCount(0)
                 .status(1)
+                .roleId(userRole.getId())
                 .createTime(now)
                 .updateTime(now)
                 .build();
@@ -84,10 +86,10 @@ public class UserService {
 
         // BCrypt 校验密码
         if (!BCryptUtils.matches(request.getPassword(), user.getPassword())) {
-            // 密码错误，更新失败次数
             incrementLoginFailCount(user);
             throw new BusinessException(ErrorCode.LOGIN_ERROR, "用户名或密码错误");
         }
+        accountGate.assertUsable(user);
 
         // 登录成功：清空失败计数，记录登录信息
         User update = new User();
@@ -128,6 +130,7 @@ public class UserService {
         Long userId = JwtUtils.getUserIdFromToken(refreshToken);
         User user = userMapper.selectOneById(userId);
         ThrowUtils.throwIf(user == null, ErrorCode.NOT_FOUND_ERROR, "用户不存在");
+        accountGate.assertRefreshUsable(user, claims.getIssuedAt());
 
         // 生成新的双 Token
         String newAccessToken = JwtUtils.generateToken(user.getId(), user.getUsername());
@@ -142,15 +145,24 @@ public class UserService {
     }
 
     /**
+     * 退出登录：此时间及之前签发的 Refresh Token 全部失效。
+     */
+    public void logout(Long userId) {
+        User update = new User();
+        update.setId(userId);
+        update.setRefreshInvalidBefore(LocalDateTime.now());
+        update.setUpdateTime(LocalDateTime.now());
+        userMapper.update(update);
+    }
+
+    /**
      * 获取当前登录用户信息
      */
     public UserVO getCurrentUser() {
         Long userId = UserContext.getUserId();
         ThrowUtils.throwIf(userId == null, ErrorCode.NOT_LOGIN_ERROR, "未登录");
 
-        User user = userMapper.selectOneById(userId);
-        ThrowUtils.throwIf(user == null, ErrorCode.NOT_FOUND_ERROR, "用户不存在");
-
+        User user = accountGate.requireActive(userId);
         return toUserVO(user);
     }
 
@@ -176,6 +188,14 @@ public class UserService {
      * Entity → VO 转换
      */
     private UserVO toUserVO(User user) {
+        return buildUserVO(user, accountGate.findRole(user.getRoleId()));
+    }
+
+    public UserVO toView(User user, Role role) {
+        return buildUserVO(user, role);
+    }
+
+    private UserVO buildUserVO(User user, Role role) {
         return UserVO.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -183,6 +203,9 @@ public class UserService {
                 .email(user.getEmail())
                 .phone(user.getPhone())
                 .status(user.getStatus())
+                .roleId(user.getRoleId())
+                .roleCode(role == null ? null : role.getCode())
+                .roleName(role == null ? null : role.getName())
                 .createTime(user.getCreateTime())
                 .build();
     }

@@ -10,6 +10,8 @@ import com.ai.aijava.agent.service.DatasetGenerationService;
 import com.ai.aijava.agent.service.EvaluationService;
 import com.ai.aijava.agent.service.FineTuneJobService;
 import com.ai.aijava.annotation.RequireLogin;
+import com.ai.aijava.annotation.RequirePermission;
+import com.ai.aijava.auth.Permissions;
 import com.ai.aijava.common.BaseResponse;
 import com.ai.aijava.common.ResultUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,6 +35,7 @@ import java.util.Map;
  * （路由前缀保留 /fine-tune 以兼容前端；官方微调已替换为本地风格蒸馏）
  */
 @Tag(name = "风格蒸馏")
+@RequirePermission(Permissions.FT_USE)
 @RestController
 @RequestMapping("/fine-tune")
 @RequiredArgsConstructor

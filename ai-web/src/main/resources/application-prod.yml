@@ -17,21 +17,21 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/ai_java
-    username: root
-    password: 123456
+    url: ${DB_URL:jdbc:mysql://localhost:3306/ai_java}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
       client-type: jedis
 
   ai:
     openai:
-      # chat / embedding 各自一套连接，互不影响
+      # chat / embedding 各自一套连接，互不影响。密钥只从环境变量读取。
       chat:
-        api-key: ${AI_CHAT_API_KEY:${AI_API_KEY:4a241b248b0b44639bab2fb5ff8e3335.cna3n4wFfmtMBUk2}}
+        api-key: ${AI_CHAT_API_KEY:${AI_API_KEY:}}
         base-url: ${AI_CHAT_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
         model: glm-5.3-flash
         # glm-5.3-flash 强制思考，type 只能是 enabled；推理深度取 low / high / max
@@ -40,13 +40,13 @@ spring:
             type: enabled
           reasoning_effort: low
       embedding:
-        api-key: ${AI_EMBEDDING_API_KEY:${AI_API_KEY:4a241b248b0b44639bab2fb5ff8e3335.cna3n4wFfmtMBUk2}}
+        api-key: ${AI_EMBEDDING_API_KEY:${AI_API_KEY:}}
         base-url: ${AI_EMBEDDING_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
         model: embedding-3
         dimensions: 1024
     vectorstore:
       redis:
-        uri: redis://localhost:6379
+        uri: ${REDIS_URI:redis://localhost:6379}
         index-name: ai-java-kb
         prefix: "kb:vector:"
         initialize-schema: true
@@ -62,7 +62,8 @@ spring:
           keep-alive-interval: 30s
 
 jwt:
-  secret: "your-256-bit-secret-key-here-must-be-at-least-32-chars"
+  # 本地未设置 JWT_SECRET 时用这段开发密钥，避免启动失败。上线前必须用环境变量覆盖成私有密钥。
+  secret: ${JWT_SECRET:dev-only-jwt-secret-key-32chars-min}
   access-token-expiration: 7200
   refresh-token-expiration: 604800
 
@@ -71,9 +72,22 @@ audit:
     retention-days: 180
 
 knife4j:
-  enable: true
+  enable: ${KNIFE4J_ENABLE:false}
   setting:
     language: zh_cn
+
+springdoc:
+  api-docs:
+    enabled: ${KNIFE4J_ENABLE:false}
+  swagger-ui:
+    enabled: ${KNIFE4J_ENABLE:false}
+
+app:
+  admin:
+    username: ${APP_ADMIN_USERNAME:admin}
+    password: ${APP_ADMIN_PASSWORD:}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
 
 agent:
   upload-dir: ./uploads
@@ -91,4 +105,5 @@ agent:
 
 mcp:
   security:
+    enabled: ${MCP_ENABLED:false}
     token: ${MCP_TOKEN:}

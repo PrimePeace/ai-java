@@ -104,7 +104,7 @@ export function setupInterceptors(r: Router) {
 
 function handleAuthFailure() {
   const userStore = useUserStore();
-  userStore.logout();
+  userStore.clearSession();
   if (router) {
     router.push({
       name: "login",

@@ -1,6 +1,8 @@
 package com.ai.aijava.controller;
 
 import com.ai.aijava.annotation.RequireLogin;
+import com.ai.aijava.annotation.RequirePermission;
+import com.ai.aijava.auth.Permissions;
 import com.ai.aijava.common.BaseResponse;
 import com.ai.aijava.common.ResultUtils;
 import com.ai.aijava.dto.request.AuditLogQueryRequest;
@@ -29,6 +31,7 @@ public class AuditLogController {
 
     @Operation(summary = "分页查询审计日志")
     @RequireLogin
+    @RequirePermission(Permissions.AUDIT_VIEW)
     @GetMapping("/list")
     public BaseResponse<Page<AuditLog>> listAuditLogs(@ParameterObject @Valid AuditLogQueryRequest request) {
         Page<AuditLog> page = auditLogService.pageQuery(request);

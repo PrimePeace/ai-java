@@ -5,6 +5,7 @@ import com.ai.aijava.annotation.RequireLogin;
 import com.ai.aijava.audit.AuditLogType;
 import com.ai.aijava.common.BaseResponse;
 import com.ai.aijava.common.ResultUtils;
+import com.ai.aijava.context.UserContext;
 import com.ai.aijava.dto.request.RefreshTokenRequest;
 import com.ai.aijava.dto.request.UserLoginRequest;
 import com.ai.aijava.dto.request.UserRegisterRequest;
@@ -52,6 +53,14 @@ public class UserController {
     public BaseResponse<UserLoginVO> refreshToken(@RequestBody @Valid RefreshTokenRequest request) {
         UserLoginVO loginVO = userService.refreshToken(request.getRefreshToken());
         return ResultUtils.success(loginVO);
+    }
+
+    @Operation(summary = "退出登录")
+    @RequireLogin
+    @PostMapping("/logout")
+    public BaseResponse<Void> logout() {
+        userService.logout(UserContext.getUserId());
+        return ResultUtils.success(null);
     }
 
     @Operation(summary = "获取当前用户信息")

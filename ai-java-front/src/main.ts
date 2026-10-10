@@ -6,17 +6,20 @@ import router from "./router";
 import "./styles/global.css";
 import { setupInterceptors } from "./api/request";
 import { useUserStore } from "./stores/user";
+import { useMenuStore } from "./stores/menu";
 
 const app = createApp(App);
 
 app.use(createPinia());
 app.use(router);
 
-// 初始化 HTTP 拦截器（需要 router 实例用于自动跳转）
 setupInterceptors(router);
+useMenuStore().bindRouter(router);
 
-// 页面刷新时恢复认证状态
 const userStore = useUserStore();
 await userStore.initAuth();
+if (userStore.accessToken) {
+  await useMenuStore().load();
+}
 
 app.mount("#app");

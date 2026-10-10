@@ -22,6 +22,8 @@ public class UserTableDef extends QueryTable {
     public final QueryColumn LOGIN_FAIL_COUNT = new QueryColumn(this, "login_fail_count");
     public final QueryColumn LOCK_TIME = new QueryColumn(this, "lock_time");
     public final QueryColumn STATUS = new QueryColumn(this, "status");
+    public final QueryColumn ROLE_ID = new QueryColumn(this, "role_id");
+    public final QueryColumn REFRESH_INVALID_BEFORE = new QueryColumn(this, "refresh_invalid_before");
     public final QueryColumn CREATE_TIME = new QueryColumn(this, "create_time");
     public final QueryColumn UPDATE_TIME = new QueryColumn(this, "update_time");
 

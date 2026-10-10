@@ -20,6 +20,9 @@ public class JwtConfig {
 
     @PostConstruct
     public void init() {
+        if (secret == null || secret.length() < 32) {
+            throw new IllegalStateException("jwt.secret 至少需要 32 个字符，请通过环境变量 JWT_SECRET 配置");
+        }
         JwtUtils.setSecret(secret);
         JwtUtils.setAccessTokenExpiration(accessTokenExpiration);
         JwtUtils.setRefreshTokenExpiration(refreshTokenExpiration);

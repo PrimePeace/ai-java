@@ -6,58 +6,89 @@ import type { MenuOption } from "naive-ui";
 import type { Component } from "vue";
 import {
   ChatbubblesOutline,
-  ConstructOutline,
   DocumentTextOutline,
+  GridOutline,
   LibraryOutline,
+  ListOutline,
+  MenuOutline,
+  PeopleOutline,
+  ShieldCheckmarkOutline,
   SparklesOutline,
-  SpeedometerOutline,
 } from "@vicons/ionicons5";
+import { useMenuStore } from "@/stores/menu";
+import type { MenuNode } from "@/types/menu";
 
 const route = useRoute();
 const router = useRouter();
+const menuStore = useMenuStore();
 const collapsed = ref(false);
 
-function renderIcon(icon: Component) {
-  return () => h(NIcon, null, { default: () => h(icon) });
-}
-
-const menuOptions: MenuOption[] = [
-  { label: "仪表盘", key: "dashboard", icon: renderIcon(SpeedometerOutline) },
-  { label: "知识库", key: "kb", icon: renderIcon(LibraryOutline) },
-  { label: "提示词模板", key: "prompt", icon: renderIcon(DocumentTextOutline) },
-  { label: "回答风格", key: "fine-tune", icon: renderIcon(ConstructOutline) },
-  { label: "智能问答", key: "chat", icon: renderIcon(ChatbubblesOutline) },
-];
-
-const menuRoutes: Record<string, string> = {
-  dashboard: "/dashboard",
-  kb: "/kb",
-  prompt: "/prompt",
-  "fine-tune": "/fine-tune",
-  chat: "/chat",
+const iconMap: Record<string, Component> = {
+  grid: GridOutline,
+  library: LibraryOutline,
+  document: DocumentTextOutline,
+  sparkles: SparklesOutline,
+  chatbubbles: ChatbubblesOutline,
+  people: PeopleOutline,
+  shield: ShieldCheckmarkOutline,
+  menu: MenuOutline,
+  list: ListOutline,
 };
 
-const activeMenu = computed(() => (route.meta.menu as string) || "dashboard");
+function renderIcon(icon?: string | null) {
+  const component = (icon && iconMap[icon]) || ListOutline;
+  return () => h(NIcon, null, { default: () => h(component) });
+}
+
+function toOptions(nodes: MenuNode[]): MenuOption[] {
+  return [...nodes]
+    .filter((node) => node.visible === 1 && node.menuType !== "BUTTON")
+    .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+    .map((node) => ({
+      label: node.name,
+      key: String(node.id),
+      icon: renderIcon(node.icon),
+      children: node.children?.length ? toOptions(node.children) : undefined,
+    }));
+}
+
+const menuOptions = computed(() => toOptions(menuStore.tree));
+const activeMenu = computed(() => (route.meta.menu as string) || "");
 
 function handleMenuSelect(key: string) {
-  const target = menuRoutes[key];
+  const target = findPath(menuStore.tree, key);
   if (target) {
     router.push(target);
   }
+}
+
+function findPath(nodes: MenuNode[], id: string): string | null {
+  for (const node of nodes) {
+    if (String(node.id) === id && node.path && !node.path.includes(":")) {
+      return node.path;
+    }
+    if (node.children?.length) {
+      const child = findPath(node.children, id);
+      if (child) {
+        return child;
+      }
+    }
+  }
+  return null;
 }
 </script>
 
 <template>
   <NLayoutSider
-      bordered
-      collapse-mode="width"
-      :collapsed="collapsed"
-      :collapsed-width="64"
-      :width="220"
-      :native-scrollbar="false"
-      show-trigger
-      @collapse="collapsed = true"
-      @expand="collapsed = false"
+    bordered
+    collapse-mode="width"
+    :collapsed="collapsed"
+    :collapsed-width="64"
+    :width="220"
+    :native-scrollbar="false"
+    show-trigger
+    @collapse="collapsed = true"
+    @expand="collapsed = false"
   >
     <div class="sider-logo">
       <span class="logo-badge">
@@ -66,34 +97,24 @@ function handleMenuSelect(key: string) {
       <span v-show="!collapsed" class="logo-text">AI 知识库</span>
     </div>
     <NMenu
-        :collapsed="collapsed"
-        :collapsed-width="64"
-        :collapsed-icon-size="20"
-        :options="menuOptions"
-        :value="activeMenu"
-        @update:value="handleMenuSelect"
+      :collapsed="collapsed"
+      :collapsed-width="64"
+      :collapsed-icon-size="20"
+      :options="menuOptions"
+      :value="activeMenu"
+      @update:value="handleMenuSelect"
     />
   </NLayoutSider>
 </template>
 
 <style scoped>
-
-/* 定义在当前组件的作用域内 */
-.sider-logo {
-  /* 或者直接定义在父级 */
-}
-/* 也可以在组件的根元素上定义，如果这个变量只在当前组件用的话 */
-:root {
-  --n-border-color: #eff5f5;
-}
-
 .sider-logo {
   height: var(--header-height);
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  border-bottom: 1px solid var(--n-border-color, #efeff5);
+  border-bottom: 1px solid #efeff5;
 }
 
 .logo-badge {

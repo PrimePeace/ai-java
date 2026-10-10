@@ -36,6 +36,15 @@ public class UserVO {
     /** 账号状态（0: 未激活, 1: 正常, 2: 已封禁, 3: 已注销） */
     private Integer status;
 
+    /** 角色 ID */
+    private Long roleId;
+
+    /** 角色编码 */
+    private String roleCode;
+
+    /** 角色名称 */
+    private String roleName;
+
     /** 创建时间 */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

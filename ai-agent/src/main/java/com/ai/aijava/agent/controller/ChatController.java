@@ -8,6 +8,8 @@ import com.ai.aijava.agent.dto.vo.TokenUsageVO;
 import com.ai.aijava.agent.service.ChatSessionService;
 import com.ai.aijava.agent.service.RagChatService;
 import com.ai.aijava.annotation.RequireLogin;
+import com.ai.aijava.annotation.RequirePermission;
+import com.ai.aijava.auth.Permissions;
 import com.ai.aijava.common.BaseResponse;
 import com.ai.aijava.common.ResultUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +34,7 @@ import java.util.List;
  * 对话接口（含 SSE 流式问答）
  */
 @Tag(name = "对话")
+@RequirePermission(Permissions.CHAT_USE)
 @RestController
 @RequestMapping("/chat")
 @RequiredArgsConstructor

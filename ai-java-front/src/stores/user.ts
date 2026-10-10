@@ -5,6 +5,7 @@ import {
   registerApi,
   refreshTokenApi,
   getCurrentUserApi,
+  logoutApi,
 } from "@/api/user";
 import type {
   UserVO,
@@ -12,6 +13,7 @@ import type {
   UserLoginRequest,
   UserRegisterRequest,
 } from "@/types/user";
+import { useMenuStore } from "@/stores/menu";
 
 export const useUserStore = defineStore("user", () => {
   const accessToken = ref<string>(localStorage.getItem("accessToken") || "");
@@ -36,11 +38,24 @@ export const useUserStore = defineStore("user", () => {
   }
 
   /**
-   * 退出登录
+   * 退出登录：先通知服务端失效 Refresh Token，再清本地状态。
    */
-  function logout() {
+  async function logout() {
+    try {
+      if (accessToken.value) {
+        await logoutApi();
+      }
+    } catch {
+      // 网络失败也清除本地登录态
+    }
+    clearSession();
+  }
+
+  /** 只清本地登录态和动态路由，不请求退出接口。 */
+  function clearSession() {
     clearTokens();
     user.value = null;
+    useMenuStore().reset();
   }
 
   /**
@@ -52,8 +67,7 @@ export const useUserStore = defineStore("user", () => {
       const res = await getCurrentUserApi();
       user.value = res.data as UserVO;
     } catch {
-      clearTokens();
-      user.value = null;
+      clearSession();
     }
   }
 
@@ -100,6 +114,7 @@ export const useUserStore = defineStore("user", () => {
     login,
     register,
     logout,
+    clearSession,
     fetchCurrentUser,
     refreshTokens,
     initAuth,
